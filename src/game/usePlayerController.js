@@ -18,6 +18,12 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
   const shootCooldown = useRef(0);
   const jumpOffset = useRef(0);
   const jumpVelocity = useRef(0);
+  const lastMoveSendAt = useRef(0);
+  const lastSentMove = useRef({ x: 0, z: 0, yaw: 0 });
+  const outboundSeq = useRef(0);
+  const lastServerAckSeq = useRef(-1);
+
+  const quantize = (value, factor) => Math.round(value * factor) / factor;
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -149,18 +155,95 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
       const nowState = useGameStore.getState();
       if (nowState.netMode === "multiplayer") {
-        netClient?.move(next, { yaw: yaw.current }, nowState.localSeq + 1);
+        const nowMs = Date.now();
+        const elapsed = nowMs - lastMoveSendAt.current;
+        const moveDelta = Math.hypot(next.x - lastSentMove.current.x, next.z - lastSentMove.current.z);
+        const yawDelta = Math.abs(yaw.current - lastSentMove.current.yaw);
+        const shouldSend =
+          elapsed >= DEFAULTS.netSendIntervalMs &&
+          (moveDelta >= DEFAULTS.netMinMoveDelta || yawDelta >= DEFAULTS.netMinYawDelta);
+
+        if (shouldSend) {
+          outboundSeq.current += 1;
+          const payloadPos = {
+            x: quantize(next.x, DEFAULTS.netPositionQuantize),
+            y: quantize(next.y, DEFAULTS.netPositionQuantize),
+            z: quantize(next.z, DEFAULTS.netPositionQuantize)
+          };
+          const payloadRot = {
+            yaw: quantize(yaw.current, DEFAULTS.netYawQuantize)
+          };
+
+          netClient?.move(payloadPos, payloadRot, outboundSeq.current);
+          lastMoveSendAt.current = nowMs;
+          lastSentMove.current = { x: next.x, z: next.z, yaw: yaw.current };
+        }
       }
     } else {
       useGameStore.getState().updateLocalPlayer((prev) => ({
         ...prev,
         rotation: { yaw: yaw.current }
       }));
+
+      const nowState = useGameStore.getState();
+      if (nowState.netMode === "multiplayer") {
+        const nowMs = Date.now();
+        const elapsed = nowMs - lastMoveSendAt.current;
+        const yawDelta = Math.abs(yaw.current - lastSentMove.current.yaw);
+        if (elapsed >= DEFAULTS.netSendIntervalMs && yawDelta >= DEFAULTS.netMinYawDelta) {
+          outboundSeq.current += 1;
+          netClient?.move(
+            {
+              x: quantize(self.position.x, DEFAULTS.netPositionQuantize),
+              y: quantize(self.position.y, DEFAULTS.netPositionQuantize),
+              z: quantize(self.position.z, DEFAULTS.netPositionQuantize)
+            },
+            { yaw: quantize(yaw.current, DEFAULTS.netYawQuantize) },
+            outboundSeq.current
+          );
+          lastMoveSendAt.current = nowMs;
+          lastSentMove.current = { x: self.position.x, z: self.position.z, yaw: yaw.current };
+        }
+      }
     }
 
     const refreshed = useGameStore.getState();
     const updatedSelf = refreshed.players[refreshed.selfId];
     if (!updatedSelf) return;
+
+    if (refreshed.netMode === "multiplayer" && updatedSelf.serverPosition) {
+      const serverSeq = typeof updatedSelf.serverSeq === "number" ? updatedSelf.serverSeq : -1;
+      if (serverSeq >= lastServerAckSeq.current) {
+        lastServerAckSeq.current = serverSeq;
+        const dx = updatedSelf.serverPosition.x - updatedSelf.position.x;
+        const dz = updatedSelf.serverPosition.z - updatedSelf.position.z;
+        const errorDist = Math.hypot(dx, dz);
+        if (errorDist > DEFAULTS.netMinMoveDelta) {
+          const correctedPos =
+            errorDist > DEFAULTS.netReconcileSnapDist
+              ? updatedSelf.serverPosition
+              : {
+                  x: updatedSelf.position.x + dx * DEFAULTS.netReconcileLerp,
+                  y: updatedSelf.serverPosition.y ?? updatedSelf.position.y,
+                  z: updatedSelf.position.z + dz * DEFAULTS.netReconcileLerp
+                };
+          const correctedYaw =
+            typeof updatedSelf.serverRotation?.yaw === "number"
+              ? {
+                  yaw:
+                    updatedSelf.rotation.yaw +
+                    (updatedSelf.serverRotation.yaw - updatedSelf.rotation.yaw) * DEFAULTS.netReconcileLerp
+                }
+              : updatedSelf.rotation;
+
+          useGameStore.getState().reconcileLocalPlayer({
+            position: correctedPos,
+            rotation: correctedYaw,
+            serverSeq
+          });
+        }
+      }
+    }
 
     const cameraTarget = new Vector3(
       updatedSelf.position.x,

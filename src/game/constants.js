@@ -30,6 +30,14 @@ export const DEFAULTS = {
   zombieSpawnHeightMax: 26,
   pingIntervalMs: 1200,
   interpAlpha: 0.18,
+  netSendIntervalMs: 66,
+  netMinMoveDelta: 0.035,
+  netMinYawDelta: 0.015,
+  netPositionQuantize: 100,
+  netYawQuantize: 1000,
+  netReconcileSnapDist: 1.6,
+  netReconcileLerp: 0.35,
+  remoteInterpolationDelayMs: 100,
   zombieHp: 45,
   playerHp: 100
 };

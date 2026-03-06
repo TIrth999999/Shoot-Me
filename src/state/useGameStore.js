@@ -49,7 +49,7 @@ export const useGameStore = create((set, get) => ({
       spawnRateSec: typeof spawnRateSec === "number" ? spawnRateSec : s.spawnRateSec,
       gameOver: typeof gameOver === "boolean" ? gameOver : s.gameOver
     })),
-  applyStateDiff: ({ players, zombies, removedZombieIds, gameTime, spawnRateSec, gameOver }) =>
+  applyStateDiff: ({ players, zombies, removedZombieIds, gameTime, spawnRateSec, gameOver, serverTs }) =>
     set((s) => {
       const mergedPlayers = { ...s.players };
       for (const [id, p] of Object.entries(players || {})) {
@@ -57,7 +57,31 @@ export const useGameStore = create((set, get) => ({
           delete mergedPlayers[id];
         } else {
           const prev = mergedPlayers[id] || blankPlayer();
-          mergedPlayers[id] = { ...prev, ...p };
+          if (id === s.selfId && s.netMode === "multiplayer") {
+            mergedPlayers[id] = {
+              ...prev,
+              ...p,
+              position: prev.position,
+              rotation: prev.rotation,
+              serverPosition: p.position ?? prev.serverPosition ?? prev.position,
+              serverRotation: p.rotation ?? prev.serverRotation ?? prev.rotation,
+              serverSeq: typeof p.seq === "number" ? p.seq : prev.serverSeq
+            };
+          } else {
+            const nextSamples = prev.netSamples ? prev.netSamples.slice(-19) : [];
+            if (p.position || p.rotation) {
+              nextSamples.push({
+                ts: typeof serverTs === "number" ? serverTs : Date.now(),
+                position: p.position ?? prev.position,
+                rotation: p.rotation ?? prev.rotation
+              });
+            }
+            mergedPlayers[id] = {
+              ...prev,
+              ...p,
+              netSamples: nextSamples
+            };
+          }
         }
       }
 
@@ -91,6 +115,23 @@ export const useGameStore = create((set, get) => ({
           [selfId]: next
         },
         localSeq: s.localSeq + 1
+      };
+    }),
+  reconcileLocalPlayer: ({ position, rotation, serverSeq }) =>
+    set((s) => {
+      const selfId = s.selfId;
+      const prev = s.players[selfId];
+      if (!prev) return s;
+      return {
+        players: {
+          ...s.players,
+          [selfId]: {
+            ...prev,
+            position: position ?? prev.position,
+            rotation: rotation ?? prev.rotation,
+            serverSeq: typeof serverSeq === "number" ? serverSeq : prev.serverSeq
+          }
+        }
       };
     }),
   hydrateJoin: ({ roomId, selfId, players, zombies, gameTime, spawnRateSec }) =>
