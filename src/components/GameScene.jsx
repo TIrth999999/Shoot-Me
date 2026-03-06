@@ -8,33 +8,39 @@ import ZombieAvatar from "./ZombieAvatar";
 import { DEFAULTS } from "../game/constants";
 
 function AtmosphereLights() {
-  const key = useRef();
-  const horror = useRef();
+  const sun = useRef();
+  const fill = useRef();
 
   useFrame((state) => {
     const t = state.clock.elapsedTime;
-    if (key.current) {
-      key.current.intensity = 0.45 + Math.sin(t * 3.2) * 0.08;
+    if (sun.current) {
+      sun.current.intensity = 2.6 + Math.sin(t * 0.45) * 0.08;
     }
-    if (horror.current) {
-      horror.current.intensity = 0.6 + Math.sin(t * 17) * 0.2 + Math.sin(t * 9) * 0.08;
+    if (fill.current) {
+      fill.current.intensity = 0.32 + Math.sin(t * 0.35) * 0.04;
     }
   });
 
   return (
     <>
-      <ambientLight intensity={0.42} color="#8492a8" />
-      <hemisphereLight intensity={0.45} color="#8fa6bf" groundColor="#1a1f27" />
+      <ambientLight intensity={0.58} color="#fff8ea" />
+      <hemisphereLight intensity={0.68} color="#cbe7ff" groundColor="#bcd6a8" />
       <directionalLight
-        ref={key}
-        position={[9, 14, 5]}
-        intensity={1.15}
-        color="#c0d7eb"
+        ref={sun}
+        position={[42, 62, 18]}
+        intensity={2.7}
+        color="#fff7dd"
         castShadow
-        shadow-mapSize-width={1024}
-        shadow-mapSize-height={1024}
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-near={1}
+        shadow-camera-far={180}
+        shadow-camera-left={-80}
+        shadow-camera-right={80}
+        shadow-camera-top={80}
+        shadow-camera-bottom={-80}
       />
-      <pointLight ref={horror} position={[0, 8, 0]} color="#8ebad9" intensity={1.05} distance={48} />
+      <directionalLight ref={fill} position={[-28, 20, -16]} intensity={0.36} color="#ffffff" />
     </>
   );
 }
@@ -71,7 +77,7 @@ function GrassField({ count = 1800 }) {
   return (
     <instancedMesh ref={instanced} args={[null, null, blades.length]} receiveShadow castShadow>
       <boxGeometry args={[0.06, 1, 0.06]} />
-      <meshStandardMaterial color="#3d6a3f" roughness={0.96} metalness={0.02} emissive="#163118" emissiveIntensity={0.25} />
+      <meshStandardMaterial color="#5e9448" roughness={0.94} metalness={0.01} emissive="#2f5e25" emissiveIntensity={0.08} />
     </instancedMesh>
   );
 }
@@ -80,18 +86,18 @@ export default function GameScene() {
   const players = useGameStore((s) => s.players);
   const zombies = useGameStore((s) => s.zombies);
   const selfId = useGameStore((s) => s.selfId);
-  const fog = useMemo(() => new FogExp2("#0a0f17", 0.02), []);
+  const fog = useMemo(() => new FogExp2("#d8ecff", 0.006), []);
 
   return (
     <>
-      <color attach="background" args={[new Color("#040508")]} />
+      <color attach="background" args={[new Color("#a9d8ff")]} />
       <primitive attach="fog" object={fog} />
-      <Sky distance={450000} sunPosition={[0, 0.8, -1]} inclination={0.58} azimuth={0.24} turbidity={8} rayleigh={0.7} />
+      <Sky distance={450000} sunPosition={[1, 1, 0.2]} inclination={0.51} azimuth={0.17} turbidity={2.1} rayleigh={2.2} />
       <AtmosphereLights />
 
       <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
         <planeGeometry args={[150, 150, 16, 16]} />
-        <meshStandardMaterial color="#486648" roughness={0.95} metalness={0.03} emissive="#1b2f1d" emissiveIntensity={0.45} />
+        <meshStandardMaterial color="#7fb36a" roughness={0.93} metalness={0.02} emissive="#5f8a4b" emissiveIntensity={0.08} />
       </mesh>
       <GrassField />
 

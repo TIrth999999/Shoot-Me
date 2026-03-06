@@ -1,7 +1,7 @@
 :root {
   font-family: "Trebuchet MS", "Segoe UI", sans-serif;
-  color: #d8deeb;
-  background: radial-gradient(circle at 25% 20%, #172030 0%, #07090d 58%, #040507 100%);
+  color: #1b2938;
+  background: linear-gradient(180deg, #d6ecff 0%, #c7e2ff 45%, #b9d8f9 100%);
 }
 
 * {
@@ -52,11 +52,11 @@ canvas {
 
 .panel {
   pointer-events: auto;
-  background: rgba(8, 10, 14, 0.78);
-  border: 1px solid rgba(124, 150, 188, 0.28);
+  background: rgba(243, 249, 255, 0.84);
+  border: 1px solid rgba(97, 136, 178, 0.3);
   border-radius: 10px;
   backdrop-filter: blur(5px);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.38);
+  box-shadow: 0 10px 26px rgba(55, 92, 126, 0.22);
 }
 
 .menu {
@@ -95,15 +95,15 @@ canvas {
 
 button,
 input {
-  border: 1px solid rgba(160, 190, 220, 0.35);
-  background: rgba(15, 20, 28, 0.92);
-  color: #dbe7ff;
+  border: 1px solid rgba(120, 159, 198, 0.42);
+  background: rgba(255, 255, 255, 0.95);
+  color: #1a2b3e;
   padding: 10px;
   border-radius: 8px;
 }
 
 button:hover {
-  background: rgba(34, 45, 62, 0.95);
+  background: rgba(228, 240, 252, 0.96);
 }
 
 .hud {
@@ -153,8 +153,8 @@ button:hover {
   bottom: 14px;
   padding: 6px 10px;
   font-size: 0.85rem;
-  color: #a8bad6;
-  background: rgba(7, 10, 16, 0.62);
+  color: #2c4158;
+  background: rgba(235, 244, 253, 0.84);
   border-radius: 6px;
 }
 

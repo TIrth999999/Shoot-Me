@@ -32,6 +32,13 @@ export const useGameStore = create((set, get) => ({
   setRooms: (rooms) => set({ rooms }),
   setError: (error) => set({ error }),
   touchDamageKick: () => set((s) => ({ damageKick: s.damageKick + 1 })),
+  purgeZombie: (zombieId) =>
+    set((s) => {
+      if (!s.zombies[zombieId]) return s;
+      const next = { ...s.zombies };
+      delete next[zombieId];
+      return { zombies: next };
+    }),
   resetSession: () =>
     set({
       gameOver: false,
@@ -89,11 +96,18 @@ export const useGameStore = create((set, get) => ({
       for (const [id, z] of Object.entries(zombies || {})) {
         mergedZombies[id] = {
           ...(mergedZombies[id] || {}),
-          ...z
+          ...z,
+          removed: false
         };
       }
       for (const id of removedZombieIds || []) {
-        delete mergedZombies[id];
+        const prev = mergedZombies[id];
+        if (!prev) continue;
+        mergedZombies[id] = {
+          ...prev,
+          removed: true,
+          removedAt: Date.now()
+        };
       }
 
       return {

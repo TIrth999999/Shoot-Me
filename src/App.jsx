@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
+import { ACESFilmicToneMapping } from "three";
 import GameScene from "./components/GameScene";
 import OverlayUI from "./components/OverlayUI";
 import FirstPersonGun from "./components/FirstPersonGun";
@@ -98,7 +99,11 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <Canvas shadows camera={{ position: [0, 4, -8], fov: 60 }}>
+      <Canvas
+        shadows
+        camera={{ position: [0, 6, -8], fov: 60 }}
+        gl={{ antialias: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
+      >
         <Runtime netClient={netClient} />
       </Canvas>
       <div className="damage-vignette" style={{ opacity: damageOverlay }} />

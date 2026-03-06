@@ -45,6 +45,11 @@ export const useSoloSimulation = (enabled) => {
 
     let damaged = false;
     for (const zombie of Object.values(zombies)) {
+      if (zombie.removed) {
+        zombie.targetPlayerId = null;
+        continue;
+      }
+
       if (zombie.position.y > 0) {
         zombie.velocityY -= DEFAULTS.zombieFallGravity * dt;
         zombie.position.y = Math.max(0, zombie.position.y + zombie.velocityY * dt);
@@ -95,15 +100,20 @@ export const useSoloSimulation = (enabled) => {
     let nearestDist = Number.POSITIVE_INFINITY;
 
     for (const zombie of Object.values(state.zombies)) {
+      const baseY = (zombie.position.y || 0) + 0.05;
+      const topY = baseY + 1.85;
       const toX = zombie.position.x - origin.x;
+      const toY = (baseY + 0.95) - origin.y;
       const toZ = zombie.position.z - origin.z;
-      const projected = toX * direction.x + toZ * direction.z;
+      const projected = toX * direction.x + toY * direction.y + toZ * direction.z;
       if (projected < 0 || projected > DEFAULTS.bulletRange) continue;
 
       const cx = origin.x + direction.x * projected;
+      const cy = origin.y + direction.y * projected;
       const cz = origin.z + direction.z * projected;
-      const miss = Math.hypot(zombie.position.x - cx, zombie.position.z - cz);
-      if (miss <= 1.5 && projected < nearestDist) {
+      const horizontalMiss = Math.hypot(zombie.position.x - cx, zombie.position.z - cz);
+      const withinBodyY = cy >= baseY && cy <= topY;
+      if (horizontalMiss <= 0.48 && withinBodyY && projected < nearestDist) {
         nearestDist = projected;
         nearest = zombie.id;
       }
@@ -117,7 +127,12 @@ export const useSoloSimulation = (enabled) => {
       const updated = { ...s.zombies };
       const hp = z.hp - 25;
       if (hp <= 0) {
-        delete updated[nearest];
+        updated[nearest] = {
+          ...z,
+          hp: 0,
+          removed: true,
+          removedAt: Date.now()
+        };
       } else {
         updated[nearest] = { ...z, hp };
       }

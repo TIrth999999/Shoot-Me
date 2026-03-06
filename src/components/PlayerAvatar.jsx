@@ -53,8 +53,8 @@ export default function PlayerAvatar({ player, isSelf = false }) {
 
   return (
     <group ref={ref}>
-      <mesh castShadow>
-        <capsuleGeometry args={[0.55, 1.1, 4, 8]} />
+      {/* <mesh castShadow>
+        <capsuleGeometry args={[0.62, 1.28, 5, 10]} />
         <meshStandardMaterial
           color={isSelf ? "#9ea7bf" : "#676f83"}
           roughness={0.85}
@@ -66,7 +66,7 @@ export default function PlayerAvatar({ player, isSelf = false }) {
       <mesh position={[0, 1.2, 0.55]}>
         <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial color="#c1d9ff" emissive="#9cc2ff" emissiveIntensity={1.6} />
-      </mesh>
+      </mesh> */}
       {!isSelf && <HealthBar current={player.hp} max={100} offsetY={2.05} width={1.15} />}
     </group>
   );

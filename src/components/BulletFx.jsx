@@ -41,7 +41,7 @@ export default function BulletFx() {
       {live.current.map((b) => (
         <mesh key={b.id} position={[b.origin.x, b.origin.y, b.origin.z]}>
           <sphereGeometry args={[0.055, 7, 7]} />
-          <meshBasicMaterial color="#ffe3a2" />
+          <meshBasicMaterial color="#000000" />
         </mesh>
       ))}
     </group>

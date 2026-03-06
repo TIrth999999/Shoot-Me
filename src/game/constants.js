@@ -23,7 +23,7 @@ export const DEFAULTS = {
   cameraDistance: 8,
   cameraHeight: 4,
   firstPerson: true,
-  eyeHeight: 1.55,
+  eyeHeight: 2.55,
   bulletRange: 95,
   zombieFallGravity: 24,
   zombieSpawnHeightMin: 14,

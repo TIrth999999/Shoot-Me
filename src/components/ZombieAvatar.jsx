@@ -1,75 +1,123 @@
 import { useFrame } from "@react-three/fiber";
-import { useMemo, useRef } from "react";
-import { Color, MathUtils, Vector3 } from "three";
+import { useAnimations, useGLTF } from "@react-three/drei";
+import { useEffect, useMemo, useRef } from "react";
+import { Box3, LoopOnce, MathUtils, Vector3 } from "three";
+import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import HealthBar from "./HealthBar";
-
-const baseBodyColor = new Color("#4f6f47");
-const baseHeadColor = new Color("#6d9d5f");
-const hitColor = new Color("#ff4242");
+import { useGameStore } from "../state/useGameStore";
 
 export default function ZombieAvatar({ zombie, players }) {
   const ref = useRef();
-  const eyeGlow = useRef();
-  const bodyMat = useRef();
-  const headMat = useRef();
-  const leftArm = useRef();
-  const rightArm = useRef();
-  const leftLeg = useRef();
-  const rightLeg = useRef();
+  const modelRef = useRef();
   const prevPos = useRef(null);
-  const prevHp = useRef(zombie?.hp ?? 45);
-  const hitFlash = useRef(0);
-  const walkPhase = useRef(Math.random() * Math.PI * 2);
   const target = useMemo(() => new Vector3(), []);
+  const modelLocalOffset = useMemo(() => ({ x: 1, y: -0.12, z: 0 }), []);
+  const purgeZombie = useGameStore((s) => s.purgeZombie);
+  const gltf = useGLTF("/zombie2.glb");
+  const { scene, modelScale, modelYOffset, healthBarOffset } = useMemo(() => {
+    const sourceRoot =
+      gltf.scene.getObjectByName("Sketchfab_model") ||
+      gltf.scene.children.find((c) => typeof c.name === "string" && c.name.toLowerCase().includes("sketchfab_model")) ||
+      gltf.scene;
+    const cloned = clone(sourceRoot);
+    cloned.traverse((obj) => {
+      const nodeName = (obj.name || "").toLowerCase();
+      const isHelperByType = obj.isCamera || obj.isLight || obj.type === "Audio" || obj.type === "PositionalAudio";
+      const isHelperByName =
+        nodeName.includes("camera") ||
+        nodeName.includes("audio") ||
+        nodeName.includes("omni") ||
+        nodeName.includes("spot") ||
+        nodeName.includes("target") ||
+        nodeName.includes("particle") ||
+        nodeName.includes("particles");
+      if (isHelperByType || isHelperByName) {
+        obj.visible = false;
+      }
 
-  useFrame((state, dt) => {
+      if (obj.isMesh) {
+        obj.castShadow = true;
+        obj.receiveShadow = true;
+      }
+    });
+    const box = new Box3().setFromObject(cloned);
+    const rawHeight = Math.max(0.001, box.max.y - box.min.y);
+    const targetHeight = 2.35;
+    const normalizedScale = Math.min(220, Math.max(0.2, targetHeight / rawHeight));
+    const yOffset = -box.min.y * normalizedScale;
+    return {
+      scene: cloned,
+      modelScale: normalizedScale,
+      modelYOffset: yOffset,
+      healthBarOffset: targetHeight + 0.28
+    };
+  }, [gltf.scene]);
+  const { actions, names } = useAnimations(gltf.animations, modelRef);
+  const walkActionName = useMemo(
+    () => names.find((n) => n.toLowerCase().includes("walk")) || names[0],
+    [names]
+  );
+  const sitActionName = useMemo(
+    () => names.find((n) => n.toLowerCase().includes("sit")) || names.find((n) => n.toLowerCase().includes("idle")) || names[0],
+    [names]
+  );
+  const deathActionName = useMemo(
+    () => names.find((n) => n.toLowerCase().includes("death3")) || names.find((n) => n.toLowerCase().includes("death")),
+    [names]
+  );
+
+  useEffect(() => {
+    const walk = walkActionName ? actions[walkActionName] : null;
+    const sit = sitActionName ? actions[sitActionName] : null;
+    const death = deathActionName ? actions[deathActionName] : null;
+    if (!walk && !sit && !death) return;
+
+    if (zombie?.removed) {
+      walk?.fadeOut(0.12);
+      sit?.fadeOut(0.12);
+      if (death) {
+        death.reset();
+        death.setLoop(LoopOnce, 1);
+        death.clampWhenFinished = true;
+        death.fadeIn(0.08).play();
+      }
+      const durationMs = Math.max(700, ((death?.getClip()?.duration ?? 0.9) + 0.1) * 1000);
+      const timer = setTimeout(() => {
+        purgeZombie(zombie.id);
+      }, durationMs);
+      return () => clearTimeout(timer);
+    }
+
+    if (zombie?.idle) {
+      death?.stop();
+      walk?.fadeOut(0.2);
+      if (sit) sit.reset().fadeIn(0.2).play();
+      return;
+    }
+
+    death?.stop();
+    sit?.fadeOut(0.2);
+    if (walk) walk.reset().fadeIn(0.2).play();
+  }, [actions, deathActionName, purgeZombie, sitActionName, walkActionName, zombie?.id, zombie?.idle, zombie?.removed]);
+
+  useFrame(() => {
     if (!ref.current || !zombie?.position) return;
-    target.set(zombie.position.x, 0.7 + (zombie.position.y || 0), zombie.position.z);
+    target.set(zombie.position.x, zombie.position.y || 0, zombie.position.z);
     ref.current.position.lerp(target, 0.24);
 
     if (!prevPos.current) {
       prevPos.current = { x: zombie.position.x, z: zombie.position.z };
     }
-    const dx = zombie.position.x - prevPos.current.x;
-    const dz = zombie.position.z - prevPos.current.z;
-    const speed = Math.hypot(dx, dz);
     prevPos.current = { x: zombie.position.x, z: zombie.position.z };
-    walkPhase.current += speed * 18;
 
-    const targetPlayer = players?.[zombie.targetPlayerId];
-    if (targetPlayer?.position) {
+    if (!zombie.idle && !zombie.removed) {
+      const targetPlayer = players?.[zombie.targetPlayerId];
+      if (!targetPlayer?.position) return;
       const facingY = Math.atan2(
         targetPlayer.position.x - ref.current.position.x,
         targetPlayer.position.z - ref.current.position.z
       );
       ref.current.rotation.y = MathUtils.lerp(ref.current.rotation.y, facingY, 0.16);
-    }
-
-    if (leftArm.current && rightArm.current && leftLeg.current && rightLeg.current) {
-      const swing = Math.sin(walkPhase.current) * Math.min(0.7, speed * 16);
-      leftArm.current.rotation.x = swing;
-      rightArm.current.rotation.x = -swing;
-      leftLeg.current.rotation.x = -swing * 0.8;
-      rightLeg.current.rotation.x = swing * 0.8;
-    }
-
-    if (zombie.hp < prevHp.current) {
-      hitFlash.current = 1;
-      prevHp.current = zombie.hp;
-    } else {
-      prevHp.current = zombie.hp;
-    }
-
-    hitFlash.current = Math.max(0, hitFlash.current - dt * 5.5);
-    if (bodyMat.current && headMat.current) {
-      bodyMat.current.color.copy(baseBodyColor).lerp(hitColor, hitFlash.current);
-      headMat.current.color.copy(baseHeadColor).lerp(hitColor, hitFlash.current);
-      bodyMat.current.emissive.setRGB(0.1 + hitFlash.current * 0.35, 0.1, 0.1);
-      headMat.current.emissive.setRGB(0.08 + hitFlash.current * 0.35, 0.08, 0.08);
-    }
-
-    if (eyeGlow.current) {
-      eyeGlow.current.intensity = 1 + Math.sin(state.clock.elapsedTime * 6) * 0.24;
     }
   });
 
@@ -77,40 +125,15 @@ export default function ZombieAvatar({ zombie, players }) {
 
   return (
     <group ref={ref}>
-      <mesh castShadow>
-        <boxGeometry args={[0.9, 1.4, 0.55]} />
-        <meshStandardMaterial ref={bodyMat} color="#4f6f47" roughness={0.95} metalness={0.02} emissive="#1d311f" emissiveIntensity={0.45} />
-      </mesh>
-      <mesh position={[0, 1.1, 0]} castShadow>
-        <boxGeometry args={[0.62, 0.62, 0.62]} />
-        <meshStandardMaterial ref={headMat} color="#6d9d5f" roughness={0.88} />
-      </mesh>
-      <mesh ref={leftArm} position={[-0.62, 0.58, 0]} castShadow>
-        <boxGeometry args={[0.2, 0.82, 0.2]} />
-        <meshStandardMaterial color="#4e6a48" roughness={0.9} />
-      </mesh>
-      <mesh ref={rightArm} position={[0.62, 0.58, 0]} castShadow>
-        <boxGeometry args={[0.2, 0.82, 0.2]} />
-        <meshStandardMaterial color="#4e6a48" roughness={0.9} />
-      </mesh>
-      <mesh ref={leftLeg} position={[-0.22, -0.78, 0]} castShadow>
-        <boxGeometry args={[0.24, 0.95, 0.24]} />
-        <meshStandardMaterial color="#3f5740" roughness={0.9} />
-      </mesh>
-      <mesh ref={rightLeg} position={[0.22, -0.78, 0]} castShadow>
-        <boxGeometry args={[0.24, 0.95, 0.24]} />
-        <meshStandardMaterial color="#3f5740" roughness={0.9} />
-      </mesh>
-      <pointLight ref={eyeGlow} position={[0, 1.1, 0.35]} color="#8df264" intensity={1.1} distance={3} />
-      <mesh position={[-0.12, 1.12, 0.32]}>
-        <sphereGeometry args={[0.05, 6, 6]} />
-        <meshStandardMaterial color="#9cff78" emissive="#8df264" emissiveIntensity={2} />
-      </mesh>
-      <mesh position={[0.12, 1.12, 0.32]}>
-        <sphereGeometry args={[0.05, 6, 6]} />
-        <meshStandardMaterial color="#9cff78" emissive="#8df264" emissiveIntensity={2} />
-      </mesh>
-      <HealthBar current={zombie.hp} max={45} offsetY={1.95} width={1.1} />
+      <primitive
+        ref={modelRef}
+        object={scene}
+        scale={modelScale}
+        position={[modelLocalOffset.x, modelYOffset + modelLocalOffset.y, modelLocalOffset.z]}
+      />
+      {!zombie.removed && <HealthBar current={zombie.hp} max={45} offsetY={healthBarOffset} width={1.15} />}
     </group>
   );
 }
+
+useGLTF.preload("/zombie2.glb");

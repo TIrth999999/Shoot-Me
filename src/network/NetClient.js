@@ -82,8 +82,8 @@ export class NetClient {
     this.send(MESSAGE_TYPES.PLAYER_MOVE, { position, rotation, seq });
   }
 
-  shoot(direction) {
-    this.send(MESSAGE_TYPES.SHOOT, { direction });
+  shoot(direction, origin) {
+    this.send(MESSAGE_TYPES.SHOOT, { direction, origin });
   }
 
   restart() {

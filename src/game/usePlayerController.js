@@ -72,9 +72,16 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       shootCooldown.current = 0.18;
 
       if (state.netMode === "multiplayer") {
-        netClient?.shoot(direction);
+        netClient?.shoot(visualDirection);
       } else {
-        shootLocal(self.position, direction);
+        shootLocal(
+          {
+            x: self.position.x,
+            y: DEFAULTS.eyeHeight + jumpOffset.current,
+            z: self.position.z
+          },
+          visualDirection
+        );
       }
 
       window.dispatchEvent(
