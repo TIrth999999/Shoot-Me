@@ -45,6 +45,7 @@ function Runtime({ netClient }) {
 }
 
 export default function App() {
+  const mode = useGameStore((s) => s.mode);
   const setMode = useGameStore((s) => s.setMode);
   const damageKick = useGameStore((s) => s.damageKick);
   const netClient = useNetworkController();
@@ -52,6 +53,11 @@ export default function App() {
   const decayTimer = useRef(null);
 
   useEffect(() => {
+    if (mode === "menu") {
+      setDamageOverlay(0);
+      return;
+    }
+
     setDamageOverlay(0.35);
     if (decayTimer.current) {
       clearInterval(decayTimer.current);
@@ -67,7 +73,7 @@ export default function App() {
         return next;
       });
     }, 16);
-  }, [damageKick]);
+  }, [damageKick, mode]);
 
   useEffect(
     () => () => {
@@ -98,16 +104,18 @@ export default function App() {
   }, []);
 
   return (
-    <div className="app-shell">
-      <Canvas
-        shadows
-        camera={{ position: [0, 6, -8], fov: 60 }}
-        gl={{ antialias: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
-      >
-        <Runtime netClient={netClient} />
-      </Canvas>
+    <div className={`app-shell ${mode === "menu" ? "menu-only" : ""}`}>
+      {mode !== "menu" && (
+        <Canvas
+          shadows
+          camera={{ position: [0, 6, -8], fov: 60 }}
+          gl={{ antialias: true, toneMapping: ACESFilmicToneMapping, toneMappingExposure: 1.1 }}
+        >
+          <Runtime netClient={netClient} />
+        </Canvas>
+      )}
       <div className="damage-vignette" style={{ opacity: damageOverlay }} />
-      <div className="crosshair">+</div>
+      {mode !== "menu" && <div className="crosshair" />}
       <OverlayUI
         netClient={netClient}
         onStartSolo={() => {

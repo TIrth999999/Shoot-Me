@@ -48,14 +48,24 @@ function AtmosphereLights() {
 function GrassField({ count = 1800 }) {
   const instanced = useRef();
   const dummy = useMemo(() => new Object3D(), []);
+  const tint = useMemo(() => new Color(), []);
   const blades = useMemo(() => {
     const arr = [];
     for (let i = 0; i < count; i += 1) {
+      const spread = 148;
+      const h = 0.35 + Math.random() * 1.1;
+      const w = 0.22 + Math.random() * 0.32;
       arr.push({
-        x: (Math.random() - 0.5) * 148,
-        z: (Math.random() - 0.5) * 148,
-        h: 0.25 + Math.random() * 0.8,
-        rot: Math.random() * Math.PI
+        x: (Math.random() - 0.5) * spread,
+        z: (Math.random() - 0.5) * spread,
+        h,
+        w,
+        rot: Math.random() * Math.PI * 2,
+        tiltX: (Math.random() - 0.5) * 0.34,
+        tiltZ: (Math.random() - 0.5) * 0.34,
+        hue: 0.26 + Math.random() * 0.06,
+        sat: 0.42 + Math.random() * 0.2,
+        light: 0.28 + Math.random() * 0.14
       });
     }
     return arr;
@@ -66,18 +76,23 @@ function GrassField({ count = 1800 }) {
     for (let i = 0; i < blades.length; i += 1) {
       const b = blades[i];
       dummy.position.set(b.x, b.h * 0.5 - 0.01, b.z);
-      dummy.rotation.set(0, b.rot, 0);
-      dummy.scale.set(1, b.h, 1);
+      dummy.rotation.set(b.tiltX, b.rot, b.tiltZ);
+      dummy.scale.set(b.w, b.h, b.w);
       dummy.updateMatrix();
       instanced.current.setMatrixAt(i, dummy.matrix);
+      tint.setHSL(b.hue, b.sat, b.light);
+      instanced.current.setColorAt(i, tint);
     }
     instanced.current.instanceMatrix.needsUpdate = true;
+    if (instanced.current.instanceColor) {
+      instanced.current.instanceColor.needsUpdate = true;
+    }
   }, [blades, dummy]);
 
   return (
     <instancedMesh ref={instanced} args={[null, null, blades.length]} receiveShadow castShadow>
-      <boxGeometry args={[0.06, 1, 0.06]} />
-      <meshStandardMaterial color="#5e9448" roughness={0.94} metalness={0.01} emissive="#2f5e25" emissiveIntensity={0.08} />
+      <coneGeometry args={[0.2, 1, 6, 1, true]} />
+      <meshStandardMaterial vertexColors roughness={0.93} metalness={0.01} emissive="#2e5f27" emissiveIntensity={0.04} />
     </instancedMesh>
   );
 }
