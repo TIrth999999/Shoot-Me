@@ -13,6 +13,21 @@ export const useNetworkController = () => {
   const touchDamageKick = useGameStore((s) => s.touchDamageKick);
   const playersRef = useRef(useGameStore.getState().players);
 
+  const resolveWsUrl = () => {
+    const envUrl = import.meta.env.VITE_WS_URL?.trim();
+    if (envUrl) return envUrl;
+
+    const isHttps = window.location.protocol === "https:";
+    const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
+    if (isHttps && !isLocalHost) {
+      return null;
+    }
+
+    const protocol = isHttps ? "wss" : "ws";
+    return `${protocol}://${window.location.hostname}:8080`;
+  };
+
   useEffect(() => {
     const unsub = useGameStore.subscribe((state) => {
       playersRef.current = state.players;
@@ -21,7 +36,12 @@ export const useNetworkController = () => {
   }, []);
 
   const client = useMemo(() => {
-    const host = import.meta.env.VITE_WS_URL || `ws://${window.location.hostname}:8080`;
+    const host = resolveWsUrl();
+
+    if (!host) {
+      setError("Missing VITE_WS_URL: set a public wss:// backend URL for HTTPS deployments.");
+      setConnection("disconnected");
+    }
 
     return new NetClient({
       url: host,

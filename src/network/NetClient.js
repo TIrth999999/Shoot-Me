@@ -15,10 +15,20 @@ export class NetClient {
       return;
     }
 
-    this.ws = new WebSocket(this.url);
+    if (!this.url) {
+      this.onError?.("WebSocket URL is not configured. Set VITE_WS_URL to your backend wss:// endpoint.");
+      return;
+    }
+
+    try {
+      this.ws = new WebSocket(this.url);
+    } catch {
+      this.onError?.(`Failed to open WebSocket (${this.url}). Check protocol (wss:// for HTTPS) and backend availability.`);
+      return;
+    }
     this.ws.addEventListener("open", () => this.onOpen?.());
     this.ws.addEventListener("close", () => this.onClose?.());
-    this.ws.addEventListener("error", () => this.onError?.("Connection error"));
+    this.ws.addEventListener("error", () => this.onError?.(`Connection error (${this.url})`));
     this.ws.addEventListener("message", (event) => {
       try {
         const msg = JSON.parse(event.data);
