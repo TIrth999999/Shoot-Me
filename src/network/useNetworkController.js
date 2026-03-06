@@ -18,12 +18,6 @@ export const useNetworkController = () => {
     if (envUrl) return envUrl;
 
     const isHttps = window.location.protocol === "https:";
-    const isLocalHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
-
-    if (isHttps && !isLocalHost) {
-      return null;
-    }
-
     const protocol = isHttps ? "wss" : "ws";
     return `${protocol}://${window.location.hostname}:8080`;
   };
@@ -37,10 +31,10 @@ export const useNetworkController = () => {
 
   const client = useMemo(() => {
     const host = resolveWsUrl();
+    const envUrl = import.meta.env.VITE_WS_URL?.trim();
 
-    if (!host) {
-      setError("Missing VITE_WS_URL: set a public wss:// backend URL for HTTPS deployments.");
-      setConnection("disconnected");
+    if (!envUrl && window.location.protocol === "https:") {
+      setError(`VITE_WS_URL is not set. Trying ${host}. This works only if your backend is publicly reachable on WSS.`);
     }
 
     return new NetClient({
