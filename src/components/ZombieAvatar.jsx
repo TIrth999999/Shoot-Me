@@ -248,7 +248,27 @@ export default function ZombieAvatar({ zombie, players }) {
     if (!ref.current || !zombie?.position) return;
     const previousX = ref.current.position.x;
     const previousZ = ref.current.position.z;
-    target.set(zombie.position.x, zombie.position.y || 0, zombie.position.z);
+    let renderPos = zombie.position;
+    if (Array.isArray(zombie.netSamples) && zombie.netSamples.length > 0) {
+      const renderTs = Date.now() - DEFAULTS.remoteInterpolationDelayMs;
+      const samples = zombie.netSamples;
+      renderPos = samples[samples.length - 1].position;
+      for (let i = 1; i < samples.length; i += 1) {
+        const a = samples[i - 1];
+        const b = samples[i];
+        if (a.ts <= renderTs && renderTs <= b.ts) {
+          const span = Math.max(1, b.ts - a.ts);
+          const t = Math.max(0, Math.min(1, (renderTs - a.ts) / span));
+          renderPos = {
+            x: a.position.x + (b.position.x - a.position.x) * t,
+            y: (a.position.y || 0) + ((b.position.y || 0) - (a.position.y || 0)) * t,
+            z: a.position.z + (b.position.z - a.position.z) * t
+          };
+          break;
+        }
+      }
+    }
+    target.set(renderPos.x, renderPos.y || 0, renderPos.z);
     ref.current.position.lerp(target, 0.24);
 
     if (!prevPos.current) {

@@ -155,9 +155,18 @@ export const useGameStore = create((set, get) => ({
 
       const mergedZombies = { ...s.zombies };
       for (const [id, z] of Object.entries(zombies || {})) {
+        const prev = mergedZombies[id] || {};
+        const nextSamples = prev.netSamples ? prev.netSamples.slice(-19) : [];
+        if (z.position) {
+          nextSamples.push({
+            ts: typeof serverTs === "number" ? serverTs : Date.now(),
+            position: z.position
+          });
+        }
         mergedZombies[id] = {
-          ...(mergedZombies[id] || {}),
+          ...prev,
           ...z,
+          netSamples: nextSamples,
           removed: false
         };
       }
