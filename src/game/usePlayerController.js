@@ -12,6 +12,8 @@ const JUMP_FORCE = 7.8;
 
 export const usePlayerController = ({ netClient, shootLocal }) => {
   const { camera, gl } = useThree();
+  const netMode = useGameStore((s) => s.netMode);
+  const roomId = useGameStore((s) => s.roomId);
   const keys = useRef({});
   const yaw = useRef(0);
   const pitch = useRef(0);
@@ -25,6 +27,13 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
   const reloadEndAt = useRef(0);
 
   const quantize = (value, factor) => Math.round(value * factor) / factor;
+
+  useEffect(() => {
+    lastMoveSendAt.current = 0;
+    lastSentMove.current = { x: 0, z: 0, yaw: 0 };
+    outboundSeq.current = 0;
+    lastServerAckSeq.current = -1;
+  }, [netMode, roomId]);
 
   useEffect(() => {
     const startReload = () => {
@@ -260,7 +269,9 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
     if (refreshed.netMode === "multiplayer" && updatedSelf.serverPosition) {
       const serverSeq = typeof updatedSelf.serverSeq === "number" ? updatedSelf.serverSeq : -1;
-      if (serverSeq >= lastServerAckSeq.current) {
+      // Reconcile only when a new authoritative ack arrives.
+      // Using >= re-applies stale corrections every frame and causes rubberbanding.
+      if (serverSeq > lastServerAckSeq.current) {
         lastServerAckSeq.current = serverSeq;
         const dx = updatedSelf.serverPosition.x - updatedSelf.position.x;
         const dz = updatedSelf.serverPosition.z - updatedSelf.position.z;
