@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { Quaternion, Vector3 } from "three";
 
 let counter = 0;
+const BULLET_SPEED = 50;
+const FX_MAX_DIST = 7.5;
 
 export default function BulletFx() {
   const [shots, setShots] = useState([]);
@@ -13,7 +15,10 @@ export default function BulletFx() {
       const detail = event.detail;
       if (!detail?.origin || !detail?.direction) return;
       const id = `b_${counter++}`;
-      setShots((prev) => [...prev, { id, ...detail, life: 0.15 }]);
+      const maxDistance = Number.isFinite(detail.maxDistance)
+        ? Math.max(0.2, Math.min(detail.maxDistance, FX_MAX_DIST))
+        : FX_MAX_DIST;
+      setShots((prev) => [...prev, { id, ...detail, distanceLeft: maxDistance }]);
     };
 
     window.addEventListener("shot", onShot);
@@ -25,14 +30,14 @@ export default function BulletFx() {
     const next = shots
       .map((s) => ({
         ...s,
-        life: s.life - dt,
+        distanceLeft: s.distanceLeft - BULLET_SPEED * dt,
         origin: {
-          x: s.origin.x + s.direction.x * dt * 50,
-          y: s.origin.y + s.direction.y * dt * 50,
-          z: s.origin.z + s.direction.z * dt * 50
+          x: s.origin.x + s.direction.x * dt * BULLET_SPEED,
+          y: s.origin.y + s.direction.y * dt * BULLET_SPEED,
+          z: s.origin.z + s.direction.z * dt * BULLET_SPEED
         }
       }))
-      .filter((s) => s.life > 0);
+      .filter((s) => s.distanceLeft > 0);
     live.current = next;
     setShots(next);
   });

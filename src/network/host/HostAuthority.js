@@ -2,6 +2,8 @@ import { DEFAULTS } from "../../game/constants";
 import { ZOMBIE_TYPE_SPAWN_WEIGHTS, ZOMBIE_TYPES } from "../../game/zombieTypes";
 import { ZOMBIE_HITBOX, ZOMBIE_HITBOX_BASE_LIFT, ZOMBIE_HITBOX_HEIGHT_BONUS } from "../../game/zombieCombatTuning";
 import { getZombieTypeHitbox } from "../../game/zombieHitboxRegistry";
+import { getTerrainRuntime } from "../../game/terrainRuntime";
+import { pickTerrainSpawnPosition } from "../../game/terrainSpawn";
 
 const TICK_MS = Math.floor(1000 / 60);
 const SNAPSHOT_INTERVAL_SEC = 1 / 20;
@@ -10,10 +12,6 @@ const MAX_SPAWN_TRIES = 20;
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const dist2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
-const normalize2D = (x, z) => {
-  const len = Math.hypot(x, z) || 1;
-  return { x: x / len, z: z / len };
-};
 
 const roundPos = (v) => Math.round(v * 100) / 100;
 const roundYaw = (v) => Math.round(v * 1000) / 1000;
@@ -25,13 +23,12 @@ const sanitizeRotation = (rotation) => {
   return { yaw: clamp(rotation.yaw, -Math.PI * 2, Math.PI * 2) };
 };
 
-const sanitizePosition = (position) => {
+const sanitizeRequestedPosition = (position) => {
   if (!position || typeof position.x !== "number" || typeof position.z !== "number") return null;
   if (!Number.isFinite(position.x) || !Number.isFinite(position.z)) return null;
   return {
-    x: clamp(position.x, -DEFAULTS.worldWidth * 0.5, DEFAULTS.worldWidth * 0.5),
-    y: 0,
-    z: clamp(position.z, -DEFAULTS.worldDepth * 0.5, DEFAULTS.worldDepth * 0.5)
+    x: position.x,
+    z: position.z
   };
 };
 
@@ -46,11 +43,20 @@ const sanitizeDirection = (direction) => {
   return { x: x / len, y: y / len, z: z / len };
 };
 
-const rand = (n) => (Math.random() - 0.5) * n;
 const randIn = (min, max) => min + Math.random() * (max - min);
 
+const getZombieCollisionRadius = (type) =>
+  DEFAULTS.zombieCollisionRadiusByType[type] ??
+  DEFAULTS.zombieCollisionRadiusByType.default ??
+  0.62;
+
+const getSpawnGroundAtOrigin = () => {
+  const terrain = getTerrainRuntime();
+  return terrain.sampleGround(0, 0)?.y ?? 0;
+};
+
 const blankPlayer = () => ({
-  position: { x: 0, y: 0, z: 0 },
+  position: { x: 0, y: getSpawnGroundAtOrigin(), z: 0 },
   rotation: { yaw: 0 },
   hp: DEFAULTS.playerHp,
   score: 0,
@@ -101,41 +107,19 @@ const pickNonFriendlyType = () => {
   return ZOMBIE_TYPES.ZOMBIE_DOG_LONG;
 };
 
-const randomEdgeSpawn = () => {
-  const halfW = DEFAULTS.worldWidth * 0.5;
-  const halfD = DEFAULTS.worldDepth * 0.5;
-  const margin = 2.5;
-  const side = Math.floor(Math.random() * 4);
-  if (side === 0) return { x: -halfW + margin, z: rand(DEFAULTS.worldDepth) };
-  if (side === 1) return { x: halfW - margin, z: rand(DEFAULTS.worldDepth) };
-  if (side === 2) return { x: rand(DEFAULTS.worldWidth), z: -halfD + margin };
-  return { x: rand(DEFAULTS.worldWidth), z: halfD - margin };
-};
-
-const isFarEnoughFromAnyLivingPlayer = (spawnPos, players) => {
-  for (const player of Object.values(players)) {
-    if (!player || player.isDead || !player.position) continue;
-    const dx = spawnPos.x - player.position.x;
-    const dz = spawnPos.z - player.position.z;
-    if (Math.hypot(dx, dz) < MIN_SPAWN_DIST_FROM_PLAYER) {
-      return false;
+const settleZombieToGround = (zombie, groundY, dtSec) => {
+  const safeGroundY = Number.isFinite(groundY) ? groundY : 0;
+  if ((zombie.position.y || 0) > safeGroundY + 0.04) {
+    zombie.velocityY = (zombie.velocityY || 0) - DEFAULTS.zombieFallGravity * dtSec;
+    zombie.position.y = Math.max(safeGroundY, zombie.position.y + zombie.velocityY * dtSec);
+    if (zombie.position.y <= safeGroundY + 1e-4) {
+      zombie.position.y = safeGroundY;
+      zombie.velocityY = 0;
     }
+    return;
   }
-  return true;
-};
-
-const pickSpawnPos = ({ isFriendly, players }) => {
-  let candidate = null;
-  for (let i = 0; i < MAX_SPAWN_TRIES; i += 1) {
-    candidate = isFriendly
-      ? randomEdgeSpawn()
-      : {
-          x: rand(DEFAULTS.worldWidth),
-          z: rand(DEFAULTS.worldDepth)
-        };
-    if (isFarEnoughFromAnyLivingPlayer(candidate, players)) return candidate;
-  }
-  return candidate || { x: 0, z: 0 };
+  zombie.position.y = safeGroundY;
+  zombie.velocityY = 0;
 };
 
 export class HostAuthority {
@@ -227,8 +211,20 @@ export class HostAuthority {
     const player = this.room.players[playerId];
     if (!player || player.isDead) return;
 
-    const nextPos = sanitizePosition(position);
-    if (!nextPos) return;
+    const requestedPos = sanitizeRequestedPosition(position);
+    if (!requestedPos) return;
+    const terrainRuntime = getTerrainRuntime();
+    const resolved = terrainRuntime.resolveMove(
+      "player",
+      player.position,
+      requestedPos,
+      DEFAULTS.playerCollisionRadius
+    );
+    const nextPos = {
+      x: resolved.x,
+      y: resolved.groundY ?? player.position.y ?? 0,
+      z: resolved.z
+    };
     const nextRot = sanitizeRotation(rotation);
     const delta = dist2D(player.position, nextPos);
     const yawDelta = Math.abs((player.rotation?.yaw || 0) - (nextRot?.yaw || 0));
@@ -247,16 +243,26 @@ export class HostAuthority {
     if (!shooter || shooter.isDead) return;
     const safeDirection = sanitizeDirection(direction);
     if (!safeDirection) return;
+    const terrainRuntime = getTerrainRuntime();
 
     const now = Date.now();
     if (now - shooter.lastShootAt < 180) return;
     shooter.lastShootAt = now;
 
-    const shootOrigin = origin || {
+    const defaultOrigin = {
       x: shooter.position.x,
       y: (shooter.position.y || 0) + DEFAULTS.eyeHeight,
       z: shooter.position.z
     };
+    const shootOrigin =
+      origin &&
+      Number.isFinite(origin.x) &&
+      Number.isFinite(origin.y) &&
+      Number.isFinite(origin.z) &&
+      Math.hypot(origin.x - defaultOrigin.x, origin.z - defaultOrigin.z) < 2.2
+        ? origin
+        : defaultOrigin;
+    const blockedAt = terrainRuntime.raycastObstacle?.(shootOrigin, safeDirection, DEFAULTS.bulletRange);
 
     let nearestHit = null;
     let nearestDist = Number.POSITIVE_INFINITY;
@@ -316,6 +322,7 @@ export class HostAuthority {
     }
 
     if (!nearestHit) return;
+    if (Number.isFinite(blockedAt) && blockedAt <= nearestDist) return;
     nearestHit.hp -= 5;
     if (nearestHit.hp <= 0) {
       this.room.removedZombieIds.push(nearestHit.id);
@@ -331,6 +338,8 @@ export class HostAuthority {
   }
 
   restart() {
+    const terrainRuntime = getTerrainRuntime();
+    const resetGroundY = terrainRuntime.sampleGround(0, 0)?.y ?? 0;
     this.room.zombies = {};
     this.room.gameTime = 0;
     this.room.spawnRateSec = 4.2;
@@ -344,7 +353,7 @@ export class HostAuthority {
       p.hp = DEFAULTS.playerHp;
       p.score = 0;
       p.isDead = false;
-      p.position = { x: 0, y: 0, z: 0 };
+      p.position = { x: 0, y: resetGroundY, z: 0 };
       p.rotation = { yaw: 0 };
       p.lastDamagedAt = 0;
       p.lastShootAt = 0;
@@ -371,7 +380,13 @@ export class HostAuthority {
       }
       const isFriendly = type === ZOMBIE_TYPES.SKINNER_FRIENDLY;
       if (isFriendly) activeFriendlyCount += 1;
-      const spawnPos = pickSpawnPos({ isFriendly, players: this.room.players });
+      const spawnPos = pickTerrainSpawnPosition({
+        isFriendly,
+        players: this.room.players,
+        minDistance: MIN_SPAWN_DIST_FROM_PLAYER,
+        maxTries: MAX_SPAWN_TRIES,
+        radius: getZombieCollisionRadius(type)
+      });
       this.room.zombies[id] = {
         id,
         type,
@@ -379,7 +394,7 @@ export class HostAuthority {
         hp: DEFAULTS.zombieTypeHp[type] ?? DEFAULTS.zombieHp,
         position: {
           x: spawnPos.x,
-          y: 0,
+          y: spawnPos.groundY ?? 0,
           z: spawnPos.z
         },
         velocityY: 0,
@@ -402,19 +417,13 @@ export class HostAuthority {
   }
 
   updateZombies(dtSec) {
+    const terrainRuntime = getTerrainRuntime();
     const zombieSpeed = DEFAULTS.zombieBaseSpeed * (1 + (this.room.gameTime / 60) * DEFAULTS.zombieSpeedRampPerMin);
     for (const zombie of Object.values(this.room.zombies)) {
       if (zombie.removed) continue;
 
-      if (zombie.position.y > 0) {
-        zombie.velocityY -= DEFAULTS.zombieFallGravity * dtSec;
-        zombie.position.y = Math.max(0, zombie.position.y + zombie.velocityY * dtSec);
-        this.room.dirtyZombies.add(zombie.id);
-        if (zombie.position.y > 0) continue;
-        zombie.velocityY = 0;
-      }
-
       const typeSpeed = DEFAULTS.zombieTypeSpeedMult[zombie.type] || 1;
+      const collisionRadius = getZombieCollisionRadius(zombie.type);
       if (zombie.behavior === "orbit") {
         const orbitSpeed = zombie.orbitSpeed || DEFAULTS.zombieFriendlyOrbit.speedMin;
         const orbitRadius = zombie.orbitRadius || DEFAULTS.zombieFriendlyOrbit.radiusMin;
@@ -429,8 +438,14 @@ export class HostAuthority {
         const dz = tz - zombie.position.z;
         const len = Math.hypot(dx, dz) || 1;
         const orbitMoveSpeed = zombieSpeed * DEFAULTS.zombieOrbitMoveMult * typeSpeed;
-        zombie.position.x += (dx / len) * orbitMoveSpeed * dtSec;
-        zombie.position.z += (dz / len) * orbitMoveSpeed * dtSec;
+        const desired = {
+          x: zombie.position.x + (dx / len) * orbitMoveSpeed * dtSec,
+          z: zombie.position.z + (dz / len) * orbitMoveSpeed * dtSec
+        };
+        const resolved = terrainRuntime.resolveMove("zombie", zombie.position, desired, collisionRadius);
+        zombie.position.x = resolved.x;
+        zombie.position.z = resolved.z;
+        settleZombieToGround(zombie, resolved.groundY, dtSec);
         zombie.targetPlayerId = null;
         this.room.dirtyZombies.add(zombie.id);
         if ((zombie.orbitTravel || 0) >= (zombie.orbitGoal || Math.PI * 2)) {
@@ -445,12 +460,21 @@ export class HostAuthority {
       zombie.targetPlayerId = nearest.playerId;
       if (!nearest.playerId) continue;
       const target = this.room.players[nearest.playerId];
-      const dir = normalize2D(target.position.x - zombie.position.x, target.position.z - zombie.position.z);
-      zombie.position.x += dir.x * zombieSpeed * typeSpeed * dtSec;
-      zombie.position.z += dir.z * zombieSpeed * typeSpeed * dtSec;
+      const dx = target.position.x - zombie.position.x;
+      const dz = target.position.z - zombie.position.z;
+      const len = Math.hypot(dx, dz) || 1;
+      const desired = {
+        x: zombie.position.x + (dx / len) * zombieSpeed * typeSpeed * dtSec,
+        z: zombie.position.z + (dz / len) * zombieSpeed * typeSpeed * dtSec
+      };
+      const resolved = terrainRuntime.resolveMove("zombie", zombie.position, desired, collisionRadius);
+      zombie.position.x = resolved.x;
+      zombie.position.z = resolved.z;
+      settleZombieToGround(zombie, resolved.groundY, dtSec);
       this.room.dirtyZombies.add(zombie.id);
 
-      if (nearest.distance < 2.1) {
+      const distance = dist2D(target.position, zombie.position);
+      if (distance < 2.1) {
         const now = Date.now();
         if (!target.isDead && now - target.lastDamagedAt > 700) {
           target.lastDamagedAt = now;
