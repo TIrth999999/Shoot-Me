@@ -313,31 +313,20 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
         return;
       }
       const serverSeq = typeof updatedSelf.serverSeq === "number" ? updatedSelf.serverSeq : -1;
-      // Reconcile only when a new authoritative ack arrives.
-      // Using >= re-applies stale corrections every frame and causes rubberbanding.
       if (serverSeq > lastServerAckSeq.current) {
         lastServerAckSeq.current = serverSeq;
         const dx = updatedSelf.serverPosition.x - updatedSelf.position.x;
         const dz = updatedSelf.serverPosition.z - updatedSelf.position.z;
         const errorDist = Math.hypot(dx, dz);
-        if (errorDist > (DEFAULTS.netReconcileMinError ?? DEFAULTS.netMinMoveDelta)) {
-          const correctedPos =
-            errorDist > DEFAULTS.netReconcileSnapDist
-              ? updatedSelf.serverPosition
-              : {
-                  x: updatedSelf.position.x + dx * DEFAULTS.netReconcileLerp,
-                  y: updatedSelf.serverPosition.y ?? updatedSelf.position.y,
-                  z: updatedSelf.position.z + dz * DEFAULTS.netReconcileLerp
-                };
-          const correctedYaw =
-            typeof updatedSelf.serverRotation?.yaw === "number"
-              ? {
-                  yaw:
-                    updatedSelf.rotation.yaw +
-                    (updatedSelf.serverRotation.yaw - updatedSelf.rotation.yaw) * DEFAULTS.netReconcileLerp
-                }
-              : updatedSelf.rotation;
-
+        if (errorDist > (DEFAULTS.netReconcileMinError ?? DEFAULTS.netReconcileSnapDist)) {
+          const correctedPos = {
+            x: updatedSelf.serverPosition.x,
+            y: updatedSelf.serverPosition.y ?? updatedSelf.position.y,
+            z: updatedSelf.serverPosition.z
+          };
+          const correctedYaw = typeof updatedSelf.serverRotation?.yaw === "number"
+            ? { yaw: updatedSelf.serverRotation.yaw }
+            : updatedSelf.rotation;
           useGameStore.getState().reconcileLocalPlayer({
             position: correctedPos,
             rotation: correctedYaw,
