@@ -43,7 +43,11 @@ export default function PlayerAvatar({ player, isSelf = false }) {
       interpYaw.current = player.rotation?.yaw || 0;
     }
 
-    target.set(interpPos.current.x, 0.9 + (interpPos.current.y || 0), interpPos.current.z);
+    target.set(
+      interpPos.current.x,
+      DEFAULTS.playerBodyCenterHeight + (interpPos.current.y || 0),
+      interpPos.current.z
+    );
     const alpha = isSelf ? 0.45 : 0.2;
     ref.current.position.lerp(target, alpha);
     ref.current.rotation.y = interpYaw.current;
@@ -67,7 +71,14 @@ export default function PlayerAvatar({ player, isSelf = false }) {
         <sphereGeometry args={[0.08, 8, 8]} />
         <meshStandardMaterial color="#c1d9ff" emissive="#9cc2ff" emissiveIntensity={1.6} />
       </mesh> */}
-      {!isSelf && <HealthBar current={player.hp} max={100} offsetY={2.05} width={1.15} />}
+      {!isSelf && (
+        <HealthBar
+          current={player.hp}
+          max={DEFAULTS.playerHp}
+          offsetY={DEFAULTS.playerHealthBarOffset}
+          width={1.15}
+        />
+      )}
     </group>
   );
 }

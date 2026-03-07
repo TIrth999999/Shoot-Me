@@ -33,9 +33,7 @@ export const useSoloSimulation = (enabled) => {
         hp: DEFAULTS.zombieHp,
         position: {
           x: rand(DEFAULTS.worldWidth),
-          y:
-            DEFAULTS.zombieSpawnHeightMin +
-            Math.random() * (DEFAULTS.zombieSpawnHeightMax - DEFAULTS.zombieSpawnHeightMin),
+          y: 0,
           z: rand(DEFAULTS.worldDepth)
         },
         velocityY: 0,
@@ -100,10 +98,10 @@ export const useSoloSimulation = (enabled) => {
     let nearestDist = Number.POSITIVE_INFINITY;
 
     for (const zombie of Object.values(state.zombies)) {
-      const baseY = (zombie.position.y || 0) + 0.05;
-      const topY = baseY + 1.85;
+      const baseY = (zombie.position.y || 0) + DEFAULTS.zombieHitboxBaseOffset;
+      const topY = baseY + DEFAULTS.zombieBodyHeight;
       const toX = zombie.position.x - origin.x;
-      const toY = (baseY + 0.95) - origin.y;
+      const toY = (baseY + DEFAULTS.zombieBodyHeight * 0.5) - origin.y;
       const toZ = zombie.position.z - origin.z;
       const projected = toX * direction.x + toY * direction.y + toZ * direction.z;
       if (projected < 0 || projected > DEFAULTS.bulletRange) continue;

@@ -10,6 +10,14 @@ const blankPlayer = () => ({
   ping: 0
 });
 
+const blankCombat = () => ({
+  mag: DEFAULTS.weaponMagSize,
+  reserve: DEFAULTS.weaponReserveStart,
+  magSize: DEFAULTS.weaponMagSize,
+  reloadMs: DEFAULTS.weaponReloadMs,
+  isReloading: false
+});
+
 export const useGameStore = create((set, get) => ({
   mode: "menu",
   netMode: "solo",
@@ -21,6 +29,7 @@ export const useGameStore = create((set, get) => ({
   gameOver: false,
   gameTime: 0,
   spawnRateSec: 2.5,
+  combat: blankCombat(),
   players: { local: blankPlayer() },
   zombies: {},
   localSeq: 0,
@@ -44,10 +53,55 @@ export const useGameStore = create((set, get) => ({
       gameOver: false,
       gameTime: 0,
       spawnRateSec: 2.5,
+      combat: blankCombat(),
       players: { [get().selfId || "local"]: blankPlayer() },
       zombies: {},
       localSeq: 0
     }),
+  consumeLocalAmmo: () =>
+    set((s) => {
+      const combat = s.combat || blankCombat();
+      if (combat.isReloading || combat.mag <= 0) return s;
+      return {
+        combat: {
+          ...combat,
+          mag: combat.mag - 1
+        }
+      };
+    }),
+  startLocalReload: () =>
+    set((s) => {
+      const combat = s.combat || blankCombat();
+      if (combat.isReloading || combat.reserve <= 0 || combat.mag >= combat.magSize) return s;
+      return {
+        combat: {
+          ...combat,
+          isReloading: true
+        }
+      };
+    }),
+  finishLocalReload: () =>
+    set((s) => {
+      const combat = s.combat || blankCombat();
+      if (!combat.isReloading) return s;
+      const needed = combat.magSize - combat.mag;
+      const load = Math.min(needed, combat.reserve);
+      return {
+        combat: {
+          ...combat,
+          mag: combat.mag + load,
+          reserve: combat.reserve - load,
+          isReloading: false
+        }
+      };
+    }),
+  cancelLocalReload: () =>
+    set((s) => ({
+      combat: {
+        ...(s.combat || blankCombat()),
+        isReloading: false
+      }
+    })),
   setSnapshot: ({ players, zombies, gameTime, spawnRateSec, gameOver }) =>
     set((s) => ({
       players: players ?? s.players,

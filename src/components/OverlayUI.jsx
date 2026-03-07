@@ -1,8 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useGameStore } from "../state/useGameStore";
-
-const MAG_SIZE = 30;
-const RESERVE_START = 90;
 
 export default function OverlayUI({ netClient, onStartSolo }) {
   const mode = useGameStore((s) => s.mode);
@@ -21,14 +18,11 @@ export default function OverlayUI({ netClient, onStartSolo }) {
   const setError = useGameStore((s) => s.setError);
   const resetSession = useGameStore((s) => s.resetSession);
   const zombies = useGameStore((s) => s.zombies);
+  const combat = useGameStore((s) => s.combat);
 
   const [joinCode, setJoinCode] = useState("");
   const [activePanel, setActivePanel] = useState("none");
   const [weapon, setWeapon] = useState("CARBINE-M4");
-  const [ammoMag, setAmmoMag] = useState(MAG_SIZE);
-  const [ammoReserve, setAmmoReserve] = useState(RESERVE_START);
-  const [isReloading, setIsReloading] = useState(false);
-  const reloadTimer = useRef(null);
 
   const me = players[selfId];
   const hpValue = Math.max(0, Math.floor(me?.hp ?? 0));
@@ -52,9 +46,6 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     setMode("playing");
     useGameStore.setState({ roomId: "SOLO", selfId: "local" });
     resetSession();
-    setAmmoMag(MAG_SIZE);
-    setAmmoReserve(RESERVE_START);
-    setIsReloading(false);
     onStartSolo?.();
   };
 
@@ -75,16 +66,10 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     if (netMode === "solo") {
       resetSession();
       setMode("playing");
-      setAmmoMag(MAG_SIZE);
-      setAmmoReserve(RESERVE_START);
-      setIsReloading(false);
       return;
     }
     netClient?.restart();
     setMode("playing");
-    setAmmoMag(MAG_SIZE);
-    setAmmoReserve(RESERVE_START);
-    setIsReloading(false);
   };
 
   const continueGame = () => {
@@ -101,35 +86,6 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     }
   }, [mode]);
 
-  const triggerReload = () => {
-    if (isReloading || ammoReserve <= 0 || ammoMag >= MAG_SIZE) return;
-    setIsReloading(true);
-    if (reloadTimer.current) clearTimeout(reloadTimer.current);
-    reloadTimer.current = setTimeout(() => {
-      setAmmoMag((currentMag) => {
-        const needed = MAG_SIZE - currentMag;
-        const load = Math.min(needed, ammoReserve);
-        setAmmoReserve((currentReserve) => currentReserve - load);
-        return currentMag + load;
-      });
-      setIsReloading(false);
-    }, 1200);
-  };
-
-  useEffect(() => {
-    if (mode !== "playing") return undefined;
-    const onShot = () => {
-      setAmmoMag((mag) => {
-        if (mag <= 1) {
-          setTimeout(() => triggerReload(), 40);
-        }
-        return Math.max(0, mag - 1);
-      });
-    };
-    window.addEventListener("shot", onShot);
-    return () => window.removeEventListener("shot", onShot);
-  }, [mode, ammoReserve, isReloading]);
-
   useEffect(() => {
     const onKeyDown = (e) => {
       if (e.code === "Escape") {
@@ -140,20 +96,10 @@ export default function OverlayUI({ netClient, onStartSolo }) {
           setMode("playing");
         }
       }
-      if (e.code === "KeyR" && mode === "playing") {
-        triggerReload();
-      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [gameOver, mode, isReloading, ammoReserve, ammoMag]);
-
-  useEffect(
-    () => () => {
-      if (reloadTimer.current) clearTimeout(reloadTimer.current);
-    },
-    []
-  );
+  }, [gameOver, mode]);
 
   const exitToMenu = () => {
     if (netMode === "multiplayer") {
@@ -319,10 +265,10 @@ export default function OverlayUI({ netClient, onStartSolo }) {
             <div className="panel ammo-widget">
               <div className="hud-label">Ammunition</div>
               <div className="ammo-main">
-                <strong>{String(ammoMag).padStart(2, "0")}</strong>
-                <span>/ {String(ammoReserve).padStart(3, "0")}</span>
+                <strong>{String(combat?.mag ?? 0).padStart(2, "0")}</strong>
+                <span>/ {String(combat?.reserve ?? 0).padStart(3, "0")}</span>
               </div>
-              <div className="ammo-sub">{isReloading ? "Reloading..." : weapon}</div>
+              <div className="ammo-sub">{combat?.isReloading ? "Reloading..." : weapon}</div>
             </div>
 
             <div className="panel mini-widget">

@@ -1,9 +1,10 @@
 import { useFrame } from "@react-three/fiber";
 import { useAnimations, useGLTF } from "@react-three/drei";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { Box3, LoopOnce, MathUtils, Vector3 } from "three";
 import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import HealthBar from "./HealthBar";
+import { DEFAULTS } from "../game/constants";
 import { useGameStore } from "../state/useGameStore";
 
 export default function ZombieAvatar({ zombie, players }) {
@@ -42,14 +43,14 @@ export default function ZombieAvatar({ zombie, players }) {
     });
     const box = new Box3().setFromObject(cloned);
     const rawHeight = Math.max(0.001, box.max.y - box.min.y);
-    const targetHeight = 2.35;
+    const targetHeight = DEFAULTS.zombieBodyHeight;
     const normalizedScale = Math.min(220, Math.max(0.2, targetHeight / rawHeight));
     const yOffset = -box.min.y * normalizedScale;
     return {
       scene: cloned,
       modelScale: normalizedScale,
       modelYOffset: yOffset,
-      healthBarOffset: targetHeight + 0.28
+      healthBarOffset: targetHeight + DEFAULTS.zombieHealthBarHeadroom
     };
   }, [gltf.scene]);
   const { actions, names } = useAnimations(gltf.animations, modelRef);
@@ -65,6 +66,11 @@ export default function ZombieAvatar({ zombie, players }) {
     () => names.find((n) => n.toLowerCase().includes("death3")) || names.find((n) => n.toLowerCase().includes("death")),
     [names]
   );
+
+  useLayoutEffect(() => {
+    if (!ref.current || !zombie?.position) return;
+    ref.current.position.set(zombie.position.x, zombie.position.y || 0, zombie.position.z);
+  }, [zombie?.id]);
 
   useEffect(() => {
     const walk = walkActionName ? actions[walkActionName] : null;
@@ -131,7 +137,9 @@ export default function ZombieAvatar({ zombie, players }) {
         scale={modelScale}
         position={[modelLocalOffset.x, modelYOffset + modelLocalOffset.y, modelLocalOffset.z]}
       />
-      {!zombie.removed && <HealthBar current={zombie.hp} max={45} offsetY={healthBarOffset} width={1.15} />}
+      {!zombie.removed && (
+        <HealthBar current={zombie.hp} max={DEFAULTS.zombieHp} offsetY={healthBarOffset} width={1.15} />
+      )}
     </group>
   );
 }

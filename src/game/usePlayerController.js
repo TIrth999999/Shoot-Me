@@ -22,15 +22,35 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
   const lastSentMove = useRef({ x: 0, z: 0, yaw: 0 });
   const outboundSeq = useRef(0);
   const lastServerAckSeq = useRef(-1);
+  const reloadTimer = useRef(null);
 
   const quantize = (value, factor) => Math.round(value * factor) / factor;
 
   useEffect(() => {
+    const startReload = () => {
+      const state = useGameStore.getState();
+      const combat = state.combat;
+      if (!combat || combat.isReloading || combat.reserve <= 0 || combat.mag >= combat.magSize) return false;
+      state.startLocalReload();
+      window.dispatchEvent(new CustomEvent("weapon_reload_start"));
+      window.dispatchEvent(new CustomEvent("sfx", { detail: { key: "reload" } }));
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+      reloadTimer.current = setTimeout(() => {
+        useGameStore.getState().finishLocalReload();
+        window.dispatchEvent(new CustomEvent("weapon_reload_end"));
+      }, combat.reloadMs);
+      return true;
+    };
+
     const onKeyDown = (e) => {
       keys.current[e.code] = true;
       if (e.code === "Space" && jumpOffset.current <= 0.001) {
         e.preventDefault();
         jumpVelocity.current = JUMP_FORCE;
+      }
+      if (e.code === "KeyR") {
+        e.preventDefault();
+        startReload();
       }
     };
     const onKeyUp = (e) => {
@@ -56,6 +76,13 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
       const self = state.players[state.selfId];
       if (!self || self.isDead) return;
+      const combat = state.combat;
+      if (!combat) return;
+      if (combat.isReloading) return;
+      if (combat.mag <= 0) {
+        startReload();
+        return;
+      }
 
       const direction = {
         x: Math.sin(yaw.current),
@@ -70,6 +97,7 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
       if (shootCooldown.current > 0) return;
       shootCooldown.current = 0.18;
+      state.consumeLocalAmmo();
 
       if (state.netMode === "multiplayer") {
         netClient?.shoot(visualDirection);
@@ -99,6 +127,11 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
       // placeholder sound event for future audio bus integration
       window.dispatchEvent(new CustomEvent("sfx", { detail: { key: "shoot" } }));
+
+      const afterShotCombat = useGameStore.getState().combat;
+      if (afterShotCombat?.mag === 0 && afterShotCombat.reserve > 0) {
+        startReload();
+      }
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -111,6 +144,10 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
+      if (reloadTimer.current) {
+        clearTimeout(reloadTimer.current);
+        reloadTimer.current = null;
+      }
     };
   }, [gl.domElement, netClient, shootLocal]);
 
@@ -139,8 +176,8 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
     if (keys.current.KeyW) moveVec.add(forward);
     if (keys.current.KeyS) moveVec.sub(forward);
-    if (keys.current.KeyA) moveVec.sub(right);
-    if (keys.current.KeyD) moveVec.add(right);
+    if (keys.current.KeyD) moveVec.sub(right);
+    if (keys.current.KeyA) moveVec.add(right);
 
     if (moveVec.lengthSq() > 0) {
       moveVec.normalize();

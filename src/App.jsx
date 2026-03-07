@@ -51,6 +51,15 @@ export default function App() {
   const netClient = useNetworkController();
   const [damageOverlay, setDamageOverlay] = useState(0);
   const decayTimer = useRef(null);
+  const zombieSfxTimer = useRef(null);
+  const lastZombieSfxIndex = useRef(-1);
+  const audioBus = useRef({
+    shoot: null,
+    reload: null,
+    hurt: null,
+    bgm: null,
+    zombieAmbient: []
+  });
 
   useEffect(() => {
     if (mode === "menu") {
@@ -85,23 +94,147 @@ export default function App() {
   );
 
   useEffect(() => {
+    const createAndPreload = (src, volume = 1) => {
+      const audio = new Audio(src);
+      audio.preload = "auto";
+      audio.volume = volume;
+      audio.load();
+      return audio;
+    };
+
+    audioBus.current.shoot = createAndPreload("/gunFireSound.mp3", 0.7);
+    audioBus.current.reload = createAndPreload("/gunReloadSound.mp3", 0.8);
+    audioBus.current.hurt = createAndPreload("/playerHurtSound.mp3", 0.8);
+    audioBus.current.bgm = createAndPreload("/mainBackgroundThemeSound.mp3", 0.36);
+    audioBus.current.zombieAmbient = Array.from({ length: 8 }, (_, i) =>
+      createAndPreload(`/zombieS${i + 1}.mp3`, 0.5)
+    );
+    if (audioBus.current.bgm) {
+      audioBus.current.bgm.loop = true;
+    }
+
+    return () => {
+      const shoot = audioBus.current.shoot;
+      const reload = audioBus.current.reload;
+      const hurt = audioBus.current.hurt;
+      const bgm = audioBus.current.bgm;
+      if (shoot) {
+        shoot.pause();
+        shoot.currentTime = 0;
+      }
+      if (reload) {
+        reload.pause();
+        reload.currentTime = 0;
+      }
+      if (hurt) {
+        hurt.pause();
+        hurt.currentTime = 0;
+      }
+      if (bgm) {
+        bgm.pause();
+        bgm.currentTime = 0;
+      }
+      for (const z of audioBus.current.zombieAmbient || []) {
+        z.pause();
+        z.currentTime = 0;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const tryStartBgm = () => {
+      const bgm = audioBus.current.bgm;
+      if (!bgm) return;
+      if (!bgm.paused) return;
+      void bgm.play().catch(() => {});
+    };
+
     const onEscape = (e) => {
       if (e.code === "Escape" && document.pointerLockElement) {
         document.exitPointerLock();
       }
     };
 
-    const onSfx = () => {
-      // no-op placeholder for future synthesized sound generation
+    const onSfx = (event) => {
+      const key = event?.detail?.key;
+      if (key === "shoot") {
+        const s = audioBus.current.shoot;
+        if (!s) return;
+        s.pause();
+        s.currentTime = 0;
+        void s.play().catch(() => {});
+      }
+      if (key === "reload") {
+        const r = audioBus.current.reload;
+        if (!r) return;
+        r.pause();
+        r.currentTime = 0;
+        void r.play().catch(() => {});
+      }
+      if (key === "hurt") {
+        const h = audioBus.current.hurt;
+        if (!h) return;
+        h.pause();
+        h.currentTime = 0;
+        void h.play().catch(() => {});
+      }
     };
 
+    tryStartBgm();
     window.addEventListener("keydown", onEscape);
+    window.addEventListener("pointerdown", tryStartBgm);
+    window.addEventListener("keydown", tryStartBgm);
     window.addEventListener("sfx", onSfx);
     return () => {
       window.removeEventListener("keydown", onEscape);
+      window.removeEventListener("pointerdown", tryStartBgm);
+      window.removeEventListener("keydown", tryStartBgm);
       window.removeEventListener("sfx", onSfx);
     };
   }, []);
+
+  useEffect(() => {
+    if (zombieSfxTimer.current) {
+      clearTimeout(zombieSfxTimer.current);
+      zombieSfxTimer.current = null;
+    }
+    if (mode !== "playing") return undefined;
+
+    const playZombieAmbient = () => {
+      const clips = audioBus.current.zombieAmbient || [];
+      if (clips.length === 0) return;
+
+      let nextIndex = Math.floor(Math.random() * clips.length);
+      if (clips.length > 1 && nextIndex === lastZombieSfxIndex.current) {
+        nextIndex = (nextIndex + 1 + Math.floor(Math.random() * (clips.length - 1))) % clips.length;
+      }
+      lastZombieSfxIndex.current = nextIndex;
+
+      const clip = clips[nextIndex];
+      clip.currentTime = 0;
+      void clip.play().catch(() => {});
+
+      const durationMs =
+        Number.isFinite(clip.duration) && clip.duration > 0 ? clip.duration * 1000 : 2500;
+      const postPauseMs = 2000 + Math.random() * 1000;
+      const delayMs = durationMs + postPauseMs;
+      zombieSfxTimer.current = setTimeout(playZombieAmbient, delayMs);
+    };
+
+    const firstDelayMs = 1200 + Math.random() * 1600;
+    zombieSfxTimer.current = setTimeout(playZombieAmbient, firstDelayMs);
+
+    return () => {
+      if (zombieSfxTimer.current) {
+        clearTimeout(zombieSfxTimer.current);
+        zombieSfxTimer.current = null;
+      }
+      for (const clip of audioBus.current.zombieAmbient || []) {
+        clip.pause();
+        clip.currentTime = 0;
+      }
+    };
+  }, [mode]);
 
   return (
     <div className={`app-shell ${mode === "menu" ? "menu-only" : ""}`}>
