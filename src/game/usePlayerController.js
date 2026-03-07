@@ -3,6 +3,7 @@ import { useFrame, useThree } from "@react-three/fiber";
 import { Vector3 } from "three";
 import { DEFAULTS } from "./constants";
 import { useGameStore } from "../state/useGameStore";
+import { getTerrainRuntime } from "./terrainRuntime";
 
 const forward = new Vector3();
 const right = new Vector3();
@@ -106,11 +107,6 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
         return;
       }
 
-      const direction = {
-        x: Math.sin(yaw.current),
-        y: 0,
-        z: Math.cos(yaw.current)
-      };
       const visualDirection = {
         x: Math.sin(yaw.current) * Math.cos(pitch.current),
         y: Math.sin(pitch.current),
@@ -120,14 +116,22 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       if (shootCooldown.current > 0) return;
       shootCooldown.current = 0.18;
       state.consumeLocalAmmo();
+      const eyeY = (self.position.y || 0) + DEFAULTS.eyeHeight;
+      const terrainRuntime = getTerrainRuntime();
+      const shotOrigin = {
+        x: self.position.x + visualDirection.x * 0.6,
+        y: eyeY - 0.08 + visualDirection.y * 0.06,
+        z: self.position.z + visualDirection.z * 0.6
+      };
+      const blockedAt = terrainRuntime.raycastObstacle?.(shotOrigin, visualDirection, DEFAULTS.bulletRange);
 
       if (state.netMode === "multiplayer") {
-        netClient?.shoot(visualDirection);
+        netClient?.shoot(visualDirection, shotOrigin);
       } else {
         shootLocal(
           {
             x: self.position.x,
-            y: DEFAULTS.eyeHeight + jumpOffset.current,
+            y: eyeY,
             z: self.position.z
           },
           visualDirection
@@ -137,12 +141,9 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       window.dispatchEvent(
         new CustomEvent("shot", {
           detail: {
-            origin: {
-              x: self.position.x + visualDirection.x * 0.6,
-              y: DEFAULTS.eyeHeight + jumpOffset.current - 0.08 + visualDirection.y * 0.06,
-              z: self.position.z + visualDirection.z * 0.6
-            },
-            direction: visualDirection
+            origin: shotOrigin,
+            direction: visualDirection,
+            maxDistance: blockedAt ?? DEFAULTS.bulletRange
           }
         })
       );
@@ -202,6 +203,7 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
     const self = state.players[state.selfId];
     if (!self || self.isDead) return;
+    const terrainRuntime = getTerrainRuntime();
 
     if (jumpOffset.current > 0 || jumpVelocity.current > 0) {
       jumpVelocity.current -= GRAVITY * dt;
@@ -223,14 +225,16 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
     if (moveVec.lengthSq() > 0) {
       moveVec.normalize();
       const speed = DEFAULTS.playerSpeed * (keys.current.ShiftLeft ? DEFAULTS.sprintMult : 1);
-      const next = {
+      const desired = {
         x: self.position.x + moveVec.x * speed * dt,
-        y: jumpOffset.current,
         z: self.position.z + moveVec.z * speed * dt
       };
-
-      next.x = Math.max(-DEFAULTS.worldWidth / 2, Math.min(DEFAULTS.worldWidth / 2, next.x));
-      next.z = Math.max(-DEFAULTS.worldDepth / 2, Math.min(DEFAULTS.worldDepth / 2, next.z));
+      const resolved = terrainRuntime.resolveMove("player", self.position, desired, DEFAULTS.playerCollisionRadius);
+      const next = {
+        x: resolved.x,
+        y: (resolved.groundY ?? 0) + jumpOffset.current,
+        z: resolved.z
+      };
 
       useGameStore.getState().updateLocalPlayer((prev) => ({
         ...prev,
@@ -276,13 +280,20 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
         }
       }
     } else {
+      const grounded = terrainRuntime.sampleGround(self.position.x, self.position.z);
+      const nextY = (grounded?.y ?? self.position.y - jumpOffset.current) + jumpOffset.current;
       useGameStore.getState().updateLocalPlayer((prev) => ({
         ...prev,
+        position: {
+          ...prev.position,
+          y: nextY
+        },
         rotation: { yaw: yaw.current }
       }));
 
       const nowState = useGameStore.getState();
       if (nowState.netMode === "multiplayer") {
+        const latestSelf = nowState.players[nowState.selfId] || self;
         const nowMs = Date.now();
         const elapsed = nowMs - lastMoveSendAt.current;
         const yawDelta = Math.abs(yaw.current - lastSentMove.current.yaw);
@@ -290,15 +301,15 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
           outboundSeq.current += 1;
           netClient?.move(
             {
-              x: quantize(self.position.x, DEFAULTS.netPositionQuantize),
-              y: quantize(self.position.y, DEFAULTS.netPositionQuantize),
-              z: quantize(self.position.z, DEFAULTS.netPositionQuantize)
+              x: quantize(latestSelf.position.x, DEFAULTS.netPositionQuantize),
+              y: quantize(latestSelf.position.y, DEFAULTS.netPositionQuantize),
+              z: quantize(latestSelf.position.z, DEFAULTS.netPositionQuantize)
             },
             { yaw: quantize(yaw.current, DEFAULTS.netYawQuantize) },
             outboundSeq.current
           );
           lastMoveSendAt.current = nowMs;
-          lastSentMove.current = { x: self.position.x, z: self.position.z, yaw: yaw.current };
+          lastSentMove.current = { x: latestSelf.position.x, z: latestSelf.position.z, yaw: yaw.current };
         }
       }
     }
@@ -336,14 +347,14 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
     const cameraTarget = new Vector3(
       updatedSelf.position.x,
-      DEFAULTS.eyeHeight + jumpOffset.current,
+      (updatedSelf.position.y || 0) + DEFAULTS.eyeHeight,
       updatedSelf.position.z
     );
 
     camera.position.lerp(cameraTarget, 0.45);
     const lookTarget = new Vector3(
       updatedSelf.position.x + Math.sin(yaw.current) * 8,
-      DEFAULTS.eyeHeight + jumpOffset.current + Math.sin(pitch.current) * 7,
+      (updatedSelf.position.y || 0) + DEFAULTS.eyeHeight + Math.sin(pitch.current) * 7,
       updatedSelf.position.z + Math.cos(yaw.current) * 8
     );
     camera.lookAt(lookTarget);
