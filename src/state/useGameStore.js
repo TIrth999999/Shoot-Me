@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { DEFAULTS } from "../game/constants";
+import { ZOMBIE_TYPES } from "../game/zombieTypes";
 
 const blankPlayer = () => ({
   position: { x: 0, y: 0, z: 0 },
@@ -29,6 +30,12 @@ export const useGameStore = create((set, get) => ({
   gameOver: false,
   gameTime: 0,
   spawnRateSec: 2.5,
+  zombieScales: {
+    [ZOMBIE_TYPES.SKINNER]: 0.035,
+    [ZOMBIE_TYPES.ZOMBIE_DOG]: 0.0003,
+    [ZOMBIE_TYPES.ZOMBIE_DOG_LONG]: 0.13,
+    [ZOMBIE_TYPES.SKINNER_FRIENDLY]: 0.035
+  },
   combat: blankCombat(),
   players: { local: blankPlayer() },
   zombies: {},

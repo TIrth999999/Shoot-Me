@@ -22,7 +22,7 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
   const lastSentMove = useRef({ x: 0, z: 0, yaw: 0 });
   const outboundSeq = useRef(0);
   const lastServerAckSeq = useRef(-1);
-  const reloadTimer = useRef(null);
+  const reloadEndAt = useRef(0);
 
   const quantize = (value, factor) => Math.round(value * factor) / factor;
 
@@ -34,11 +34,7 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       state.startLocalReload();
       window.dispatchEvent(new CustomEvent("weapon_reload_start"));
       window.dispatchEvent(new CustomEvent("sfx", { detail: { key: "reload" } }));
-      if (reloadTimer.current) clearTimeout(reloadTimer.current);
-      reloadTimer.current = setTimeout(() => {
-        useGameStore.getState().finishLocalReload();
-        window.dispatchEvent(new CustomEvent("weapon_reload_end"));
-      }, combat.reloadMs);
+      reloadEndAt.current = performance.now() + combat.reloadMs;
       return true;
     };
 
@@ -144,10 +140,9 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
-      if (reloadTimer.current) {
-        clearTimeout(reloadTimer.current);
-        reloadTimer.current = null;
-      }
+      reloadEndAt.current = 0;
+      useGameStore.getState().cancelLocalReload();
+      window.dispatchEvent(new CustomEvent("weapon_reload_end"));
     };
   }, [gl.domElement, netClient, shootLocal]);
 
@@ -158,6 +153,14 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
     const state = useGameStore.getState();
     if (state.mode !== "playing" || state.gameOver) return;
+    if (state.combat?.isReloading && reloadEndAt.current > 0 && performance.now() >= reloadEndAt.current) {
+      state.finishLocalReload();
+      reloadEndAt.current = 0;
+      window.dispatchEvent(new CustomEvent("weapon_reload_end"));
+    } else if (!state.combat?.isReloading && reloadEndAt.current > 0) {
+      reloadEndAt.current = 0;
+      window.dispatchEvent(new CustomEvent("weapon_reload_end"));
+    }
 
     const self = state.players[state.selfId];
     if (!self || self.isDead) return;

@@ -2,8 +2,97 @@ import { useFrame } from "@react-three/fiber";
 import { useRef } from "react";
 import { DEFAULTS } from "./constants";
 import { useGameStore } from "../state/useGameStore";
+import { ZOMBIE_TYPE_SPAWN_WEIGHTS, ZOMBIE_TYPES } from "./zombieTypes";
+import { ZOMBIE_HITBOX, ZOMBIE_HITBOX_BASE_LIFT, ZOMBIE_HITBOX_HEIGHT_BONUS } from "./zombieCombatTuning";
+import { getZombieTypeHitbox } from "./zombieHitboxRegistry";
 
 const rand = (n) => (Math.random() - 0.5) * n;
+const randIn = (min, max) => min + Math.random() * (max - min);
+const BULLET_DAMAGE = 5;
+const MIN_SPAWN_DIST_FROM_PLAYER = 18;
+const MAX_SPAWN_TRIES = 20;
+
+const pickNonFriendlyType = () => {
+  let roll = Math.random();
+  const pool = ZOMBIE_TYPE_SPAWN_WEIGHTS.filter((entry) => entry.type !== ZOMBIE_TYPES.SKINNER_FRIENDLY);
+  const total = pool.reduce((acc, entry) => acc + entry.weight, 0) || 1;
+  for (const entry of pool) {
+    roll -= entry.weight / total;
+    if (roll <= 0) return entry.type;
+  }
+  return ZOMBIE_TYPES.ZOMBIE_DOG_LONG;
+};
+
+const rayIntersectsAabb = (origin, direction, min, max, maxDistance) => {
+  let tMin = 0;
+  let tMax = maxDistance;
+  const axes = ["x", "y", "z"];
+
+  for (const axis of axes) {
+    const o = origin[axis];
+    const d = direction[axis];
+    const aMin = min[axis];
+    const aMax = max[axis];
+    if (Math.abs(d) < 1e-6) {
+      if (o < aMin || o > aMax) return null;
+      continue;
+    }
+    const inv = 1 / d;
+    let t1 = (aMin - o) * inv;
+    let t2 = (aMax - o) * inv;
+    if (t1 > t2) {
+      const temp = t1;
+      t1 = t2;
+      t2 = temp;
+    }
+    tMin = Math.max(tMin, t1);
+    tMax = Math.min(tMax, t2);
+    if (tMax < tMin) return null;
+  }
+
+  return tMin;
+};
+
+const pickZombieType = () => {
+  let roll = Math.random();
+  for (const entry of ZOMBIE_TYPE_SPAWN_WEIGHTS) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.type;
+  }
+  return ZOMBIE_TYPES.ZOMBIE_DOG_LONG;
+};
+
+const randomEdgeSpawn = () => {
+  const halfW = DEFAULTS.worldWidth * 0.5;
+  const halfD = DEFAULTS.worldDepth * 0.5;
+  const margin = 2.5;
+  const side = Math.floor(Math.random() * 4);
+  if (side === 0) return { x: -halfW + margin, z: rand(DEFAULTS.worldDepth) };
+  if (side === 1) return { x: halfW - margin, z: rand(DEFAULTS.worldDepth) };
+  if (side === 2) return { x: rand(DEFAULTS.worldWidth), z: -halfD + margin };
+  return { x: rand(DEFAULTS.worldWidth), z: halfD - margin };
+};
+
+const isFarEnoughFromPlayer = (spawnPos, playerPos) => {
+  if (!spawnPos || !playerPos) return true;
+  const dx = spawnPos.x - playerPos.x;
+  const dz = spawnPos.z - playerPos.z;
+  return Math.hypot(dx, dz) >= MIN_SPAWN_DIST_FROM_PLAYER;
+};
+
+const pickSpawnPos = ({ isFriendly, playerPos }) => {
+  let candidate = null;
+  for (let i = 0; i < MAX_SPAWN_TRIES; i += 1) {
+    candidate = isFriendly
+      ? randomEdgeSpawn()
+      : {
+          x: rand(DEFAULTS.worldWidth),
+          z: rand(DEFAULTS.worldDepth)
+        };
+    if (isFarEnoughFromPlayer(candidate, playerPos)) return candidate;
+  }
+  return candidate;
+};
 
 export const useSoloSimulation = (enabled) => {
   const zombieCounter = useRef(0);
@@ -18,26 +107,46 @@ export const useSoloSimulation = (enabled) => {
     if (!self || self.isDead) return;
 
     const mins = state.gameTime / 60;
-    const spawnRate = Math.max(0.25, 2.5 - mins * 0.35);
+    const spawnRate = Math.max(0.8, 4.2 - mins * 0.22);
     const maxZombies = Math.floor(35 + mins * 10);
-    const zombieSpeed = 1.8 * (1 + mins * 0.45);
+    const zombieSpeed = DEFAULTS.zombieBaseSpeed * (1 + mins * DEFAULTS.zombieSpeedRampPerMin);
 
     spawnAcc.current += dt;
     const zombies = { ...state.zombies };
+    let activeFriendlyCount = Object.values(zombies).filter(
+      (z) => !z.removed && z.type === ZOMBIE_TYPES.SKINNER_FRIENDLY
+    ).length;
 
     while (spawnAcc.current >= spawnRate && Object.keys(zombies).length < maxZombies) {
       spawnAcc.current -= spawnRate;
       const id = `solo_${zombieCounter.current++}`;
+      let type = pickZombieType();
+      if (activeFriendlyCount === 0 && Math.random() < 0.35) {
+        type = ZOMBIE_TYPES.SKINNER_FRIENDLY;
+      }
+      if (type === ZOMBIE_TYPES.SKINNER_FRIENDLY && activeFriendlyCount > 0) {
+        type = pickNonFriendlyType();
+      }
+      const isFriendly = type === ZOMBIE_TYPES.SKINNER_FRIENDLY;
+      if (isFriendly) activeFriendlyCount += 1;
+      const spawnPos = pickSpawnPos({ isFriendly, playerPos: self.position });
       zombies[id] = {
         id,
-        hp: DEFAULTS.zombieHp,
+        type,
+        behavior: isFriendly ? "orbit" : "chase",
+        hp: DEFAULTS.zombieTypeHp[type] ?? DEFAULTS.zombieHp,
         position: {
-          x: rand(DEFAULTS.worldWidth),
+          x: spawnPos.x,
           y: 0,
-          z: rand(DEFAULTS.worldDepth)
+          z: spawnPos.z
         },
         velocityY: 0,
-        targetPlayerId: state.selfId
+        targetPlayerId: state.selfId,
+        orbitAngle: Math.random() * Math.PI * 2,
+        orbitRadius: randIn(DEFAULTS.zombieFriendlyOrbit.radiusMin, DEFAULTS.zombieFriendlyOrbit.radiusMax),
+        orbitSpeed: randIn(DEFAULTS.zombieFriendlyOrbit.speedMin, DEFAULTS.zombieFriendlyOrbit.speedMax),
+        orbitTravel: 0,
+        orbitGoal: Math.PI * 2
       };
     }
 
@@ -57,11 +166,34 @@ export const useSoloSimulation = (enabled) => {
         zombie.velocityY = 0;
       }
 
+      const typeSpeed = DEFAULTS.zombieTypeSpeedMult[zombie.type] || 1;
+      if (zombie.behavior === "orbit") {
+        const orbitSpeed = zombie.orbitSpeed || DEFAULTS.zombieFriendlyOrbit.speedMin;
+        const orbitRadius = zombie.orbitRadius || DEFAULTS.zombieFriendlyOrbit.radiusMin;
+        zombie.orbitAngle = (zombie.orbitAngle || 0) + orbitSpeed * dt;
+        zombie.orbitTravel = (zombie.orbitTravel || 0) + Math.abs(orbitSpeed * dt);
+        const tx = self.position.x + Math.cos(zombie.orbitAngle) * orbitRadius;
+        const tz = self.position.z + Math.sin(zombie.orbitAngle) * orbitRadius;
+        const dx = tx - zombie.position.x;
+        const dz = tz - zombie.position.z;
+        const len = Math.hypot(dx, dz) || 1;
+        const orbitMoveSpeed = zombieSpeed * DEFAULTS.zombieOrbitMoveMult * typeSpeed;
+        zombie.position.x += (dx / len) * orbitMoveSpeed * dt;
+        zombie.position.z += (dz / len) * orbitMoveSpeed * dt;
+        zombie.targetPlayerId = null;
+        if ((zombie.orbitTravel || 0) >= (zombie.orbitGoal || Math.PI * 2)) {
+          zombie.removed = true;
+          zombie.removedAt = Date.now();
+          zombie.targetPlayerId = null;
+        }
+        continue;
+      }
+
       const dx = self.position.x - zombie.position.x;
       const dz = self.position.z - zombie.position.z;
       const len = Math.hypot(dx, dz) || 1;
-      zombie.position.x += (dx / len) * zombieSpeed * dt;
-      zombie.position.z += (dz / len) * zombieSpeed * dt;
+      zombie.position.x += (dx / len) * zombieSpeed * typeSpeed * dt;
+      zombie.position.z += (dz / len) * zombieSpeed * typeSpeed * dt;
 
       if (len < 2.1 && performance.now() - lastDamageAt.current > 700) {
         lastDamageAt.current = performance.now();
@@ -98,21 +230,28 @@ export const useSoloSimulation = (enabled) => {
     let nearestDist = Number.POSITIVE_INFINITY;
 
     for (const zombie of Object.values(state.zombies)) {
-      const baseY = (zombie.position.y || 0) + DEFAULTS.zombieHitboxBaseOffset;
-      const topY = baseY + DEFAULTS.zombieBodyHeight;
-      const toX = zombie.position.x - origin.x;
-      const toY = (baseY + DEFAULTS.zombieBodyHeight * 0.5) - origin.y;
-      const toZ = zombie.position.z - origin.z;
-      const projected = toX * direction.x + toY * direction.y + toZ * direction.z;
-      if (projected < 0 || projected > DEFAULTS.bulletRange) continue;
+      if (zombie.removed) continue;
 
-      const cx = origin.x + direction.x * projected;
-      const cy = origin.y + direction.y * projected;
-      const cz = origin.z + direction.z * projected;
-      const horizontalMiss = Math.hypot(zombie.position.x - cx, zombie.position.z - cz);
-      const withinBodyY = cy >= baseY && cy <= topY;
-      if (horizontalMiss <= 0.48 && withinBodyY && projected < nearestDist) {
-        nearestDist = projected;
+      const runtimeHitbox = getZombieTypeHitbox(zombie.type);
+      const fallbackHitbox = ZOMBIE_HITBOX[zombie.type] || ZOMBIE_HITBOX.default;
+      const halfWidth = runtimeHitbox?.halfWidth ?? fallbackHitbox.halfWidth;
+      const fallbackHeightBonus = ZOMBIE_HITBOX_HEIGHT_BONUS[zombie.type] ?? ZOMBIE_HITBOX_HEIGHT_BONUS.default;
+      const bodyHeight = runtimeHitbox?.height ?? (fallbackHitbox.height + fallbackHeightBonus);
+      const typeLift = runtimeHitbox?.baseLift ?? (ZOMBIE_HITBOX_BASE_LIFT[zombie.type] ?? ZOMBIE_HITBOX_BASE_LIFT.default);
+      const baseY = (zombie.position.y || 0) + typeLift;
+      const min = {
+        x: zombie.position.x - halfWidth,
+        y: baseY,
+        z: zombie.position.z - halfWidth
+      };
+      const max = {
+        x: zombie.position.x + halfWidth,
+        y: baseY + bodyHeight,
+        z: zombie.position.z + halfWidth
+      };
+      const hitT = rayIntersectsAabb(origin, direction, min, max, DEFAULTS.bulletRange);
+      if (hitT !== null && hitT < nearestDist) {
+        nearestDist = hitT;
         nearest = zombie.id;
       }
     }
@@ -123,7 +262,7 @@ export const useSoloSimulation = (enabled) => {
       const z = s.zombies[nearest];
       if (!z) return {};
       const updated = { ...s.zombies };
-      const hp = z.hp - 25;
+      const hp = z.hp - BULLET_DAMAGE;
       if (hp <= 0) {
         updated[nearest] = {
           ...z,

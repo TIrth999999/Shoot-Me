@@ -278,6 +278,7 @@ export default function OverlayUI({ netClient, onStartSolo }) {
                 <span>Ping: {me?.ping ?? 0} ms</span>
               </div>
             </div>
+
           </div>
 
           <div className="panel scoreboard modern">
