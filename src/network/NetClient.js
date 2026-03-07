@@ -216,6 +216,9 @@ export class NetClient {
         for (const channel of this.channels.values()) {
           this.sendChannel(channel, packet);
         }
+      },
+      onFatalError: (error) => {
+        this.onError?.(`Host simulation crashed: ${error?.message || "Unknown error"}`);
       }
     });
     this.authority.start();

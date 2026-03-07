@@ -67,6 +67,20 @@ const isEveryoneDead = (players) => {
   return list.length > 0 && list.every((p) => p.isDead);
 };
 
+const pickNearestLivingPlayer = (players, zombie) => {
+  let nearestId = null;
+  let nearestDist = Number.POSITIVE_INFINITY;
+  for (const [playerId, player] of Object.entries(players)) {
+    if (!player || player.isDead || !player.position) continue;
+    const d = dist2D(player.position, zombie.position);
+    if (d < nearestDist) {
+      nearestDist = d;
+      nearestId = playerId;
+    }
+  }
+  return { playerId: nearestId, distance: nearestDist };
+};
+
 const pickZombieType = () => {
   let roll = Math.random();
   for (const entry of ZOMBIE_TYPE_SPAWN_WEIGHTS) {
@@ -125,10 +139,11 @@ const pickSpawnPos = ({ isFriendly, players }) => {
 };
 
 export class HostAuthority {
-  constructor({ hostId, onStateDiff, onGameOver }) {
+  constructor({ hostId, onStateDiff, onGameOver, onFatalError }) {
     this.hostId = hostId;
     this.onStateDiff = onStateDiff;
     this.onGameOver = onGameOver;
+    this.onFatalError = onFatalError;
     this.timer = null;
     this.room = {
       players: {},
@@ -150,7 +165,14 @@ export class HostAuthority {
 
   start() {
     if (this.timer) return;
-    this.timer = setInterval(() => this.tick(TICK_MS / 1000), TICK_MS);
+    this.timer = setInterval(() => {
+      try {
+        this.tick(TICK_MS / 1000);
+      } catch (error) {
+        this.stop();
+        this.onFatalError?.(error);
+      }
+    }, TICK_MS);
   }
 
   stop() {
