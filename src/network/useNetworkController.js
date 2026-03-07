@@ -14,12 +14,14 @@ export const useNetworkController = () => {
   const playersRef = useRef(useGameStore.getState().players);
 
   const resolveWsUrl = () => {
-    const envUrl = import.meta.env.VITE_WS_URL?.trim();
-    if (envUrl) return envUrl;
-
+    const envSignal = import.meta.env.VITE_SIGNALING_URL?.trim() || import.meta.env.VITE_WS_URL?.trim();
+    const raw = envSignal || "https://shoot-me-backend.onrender.com";
+    if (raw.startsWith("ws://") || raw.startsWith("wss://")) return raw;
+    if (raw.startsWith("https://")) return raw.replace("https://", "wss://");
+    if (raw.startsWith("http://")) return raw.replace("http://", "ws://");
     const isHttps = window.location.protocol === "https:";
     const protocol = isHttps ? "wss" : "ws";
-    return `${protocol}://${window.location.hostname}:8080`;
+    return `${protocol}://${raw.replace(/^\/+/, "")}`;
   };
 
   useEffect(() => {
@@ -31,10 +33,10 @@ export const useNetworkController = () => {
 
   const client = useMemo(() => {
     const host = resolveWsUrl();
-    const envUrl = import.meta.env.VITE_WS_URL?.trim();
+    const envUrl = import.meta.env.VITE_SIGNALING_URL?.trim() || import.meta.env.VITE_WS_URL?.trim();
 
     if (!envUrl && window.location.protocol === "https:") {
-      setError(`VITE_WS_URL is not set. Trying ${host}. This works only if your backend is publicly reachable on WSS.`);
+      setError(`VITE_SIGNALING_URL is not set. Trying ${host}.`);
     }
 
     return new NetClient({
