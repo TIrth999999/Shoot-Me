@@ -308,30 +308,28 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
     if (!updatedSelf) return;
 
     if (refreshed.netMode === "multiplayer" && updatedSelf.serverPosition) {
-      if (netClient?.isHost) {
-        // Host runs authority locally; skip self-reconciliation to avoid artificial rubberband.
-        return;
-      }
-      const serverSeq = typeof updatedSelf.serverSeq === "number" ? updatedSelf.serverSeq : -1;
-      if (serverSeq > lastServerAckSeq.current) {
-        lastServerAckSeq.current = serverSeq;
-        const dx = updatedSelf.serverPosition.x - updatedSelf.position.x;
-        const dz = updatedSelf.serverPosition.z - updatedSelf.position.z;
-        const errorDist = Math.hypot(dx, dz);
-        if (errorDist > (DEFAULTS.netReconcileMinError ?? DEFAULTS.netReconcileSnapDist)) {
-          const correctedPos = {
-            x: updatedSelf.serverPosition.x,
-            y: updatedSelf.serverPosition.y ?? updatedSelf.position.y,
-            z: updatedSelf.serverPosition.z
-          };
-          const correctedYaw = typeof updatedSelf.serverRotation?.yaw === "number"
-            ? { yaw: updatedSelf.serverRotation.yaw }
-            : updatedSelf.rotation;
-          useGameStore.getState().reconcileLocalPlayer({
-            position: correctedPos,
-            rotation: correctedYaw,
-            serverSeq
-          });
+      if (!netClient?.isHost) {
+        const serverSeq = typeof updatedSelf.serverSeq === "number" ? updatedSelf.serverSeq : -1;
+        if (serverSeq > lastServerAckSeq.current) {
+          lastServerAckSeq.current = serverSeq;
+          const dx = updatedSelf.serverPosition.x - updatedSelf.position.x;
+          const dz = updatedSelf.serverPosition.z - updatedSelf.position.z;
+          const errorDist = Math.hypot(dx, dz);
+          if (errorDist > (DEFAULTS.netReconcileMinError ?? DEFAULTS.netReconcileSnapDist)) {
+            const correctedPos = {
+              x: updatedSelf.serverPosition.x,
+              y: updatedSelf.serverPosition.y ?? updatedSelf.position.y,
+              z: updatedSelf.serverPosition.z
+            };
+            const correctedYaw = typeof updatedSelf.serverRotation?.yaw === "number"
+              ? { yaw: updatedSelf.serverRotation.yaw }
+              : updatedSelf.rotation;
+            useGameStore.getState().reconcileLocalPlayer({
+              position: correctedPos,
+              rotation: correctedYaw,
+              serverSeq
+            });
+          }
         }
       }
     }
