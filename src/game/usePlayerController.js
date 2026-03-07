@@ -25,6 +25,7 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
   const outboundSeq = useRef(0);
   const lastServerAckSeq = useRef(-1);
   const reloadEndAt = useRef(0);
+  const pointerLockPending = useRef(false);
 
   const quantize = (value, factor) => Math.round(value * factor) / factor;
 
@@ -75,7 +76,23 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       if (state.mode !== "playing" || state.gameOver) return;
 
       if (document.pointerLockElement !== gl.domElement) {
-        gl.domElement.requestPointerLock();
+        if (!pointerLockPending.current) {
+          pointerLockPending.current = true;
+          try {
+            const lockRequest = gl.domElement.requestPointerLock();
+            if (lockRequest && typeof lockRequest.then === "function") {
+              lockRequest
+                .catch(() => {})
+                .finally(() => {
+                  pointerLockPending.current = false;
+                });
+            } else {
+              pointerLockPending.current = false;
+            }
+          } catch {
+            pointerLockPending.current = false;
+          }
+        }
         return;
       }
 
@@ -139,17 +156,29 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
       }
     };
 
+    const onPointerLockChange = () => {
+      pointerLockPending.current = false;
+    };
+    const onPointerLockError = () => {
+      pointerLockPending.current = false;
+    };
+
     window.addEventListener("keydown", onKeyDown);
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("mousemove", onMouseMove);
     window.addEventListener("mousedown", onMouseDown);
+    window.addEventListener("pointerlockchange", onPointerLockChange);
+    window.addEventListener("pointerlockerror", onPointerLockError);
 
     return () => {
       window.removeEventListener("keydown", onKeyDown);
       window.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mousedown", onMouseDown);
+      window.removeEventListener("pointerlockchange", onPointerLockChange);
+      window.removeEventListener("pointerlockerror", onPointerLockError);
       reloadEndAt.current = 0;
+      pointerLockPending.current = false;
       useGameStore.getState().cancelLocalReload();
       window.dispatchEvent(new CustomEvent("weapon_reload_end"));
     };
