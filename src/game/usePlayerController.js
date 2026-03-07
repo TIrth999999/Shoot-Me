@@ -211,28 +211,39 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
 
       const nowState = useGameStore.getState();
       if (nowState.netMode === "multiplayer") {
-        const nowMs = Date.now();
-        const elapsed = nowMs - lastMoveSendAt.current;
-        const moveDelta = Math.hypot(next.x - lastSentMove.current.x, next.z - lastSentMove.current.z);
-        const yawDelta = Math.abs(yaw.current - lastSentMove.current.yaw);
-        const shouldSend =
-          elapsed >= DEFAULTS.netSendIntervalMs &&
-          (moveDelta >= DEFAULTS.netMinMoveDelta || yawDelta >= DEFAULTS.netMinYawDelta);
-
-        if (shouldSend) {
+        if (netClient?.isHost) {
           outboundSeq.current += 1;
-          const payloadPos = {
-            x: quantize(next.x, DEFAULTS.netPositionQuantize),
-            y: quantize(next.y, DEFAULTS.netPositionQuantize),
-            z: quantize(next.z, DEFAULTS.netPositionQuantize)
-          };
-          const payloadRot = {
-            yaw: quantize(yaw.current, DEFAULTS.netYawQuantize)
-          };
-
-          netClient?.move(payloadPos, payloadRot, outboundSeq.current);
-          lastMoveSendAt.current = nowMs;
+          netClient?.move(
+            { x: next.x, y: next.y, z: next.z },
+            { yaw: yaw.current },
+            outboundSeq.current
+          );
           lastSentMove.current = { x: next.x, z: next.z, yaw: yaw.current };
+          lastMoveSendAt.current = Date.now();
+        } else {
+          const nowMs = Date.now();
+          const elapsed = nowMs - lastMoveSendAt.current;
+          const moveDelta = Math.hypot(next.x - lastSentMove.current.x, next.z - lastSentMove.current.z);
+          const yawDelta = Math.abs(yaw.current - lastSentMove.current.yaw);
+          const shouldSend =
+            elapsed >= DEFAULTS.netSendIntervalMs &&
+            (moveDelta >= DEFAULTS.netMinMoveDelta || yawDelta >= DEFAULTS.netMinYawDelta);
+
+          if (shouldSend) {
+            outboundSeq.current += 1;
+            const payloadPos = {
+              x: quantize(next.x, DEFAULTS.netPositionQuantize),
+              y: quantize(next.y, DEFAULTS.netPositionQuantize),
+              z: quantize(next.z, DEFAULTS.netPositionQuantize)
+            };
+            const payloadRot = {
+              yaw: quantize(yaw.current, DEFAULTS.netYawQuantize)
+            };
+
+            netClient?.move(payloadPos, payloadRot, outboundSeq.current);
+            lastMoveSendAt.current = nowMs;
+            lastSentMove.current = { x: next.x, z: next.z, yaw: yaw.current };
+          }
         }
       }
     } else {
@@ -268,6 +279,10 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
     if (!updatedSelf) return;
 
     if (refreshed.netMode === "multiplayer" && updatedSelf.serverPosition) {
+      if (netClient?.isHost) {
+        // Host runs authority locally; skip self-reconciliation to avoid artificial rubberband.
+        return;
+      }
       const serverSeq = typeof updatedSelf.serverSeq === "number" ? updatedSelf.serverSeq : -1;
       // Reconcile only when a new authoritative ack arrives.
       // Using >= re-applies stale corrections every frame and causes rubberbanding.
@@ -276,7 +291,7 @@ export const usePlayerController = ({ netClient, shootLocal }) => {
         const dx = updatedSelf.serverPosition.x - updatedSelf.position.x;
         const dz = updatedSelf.serverPosition.z - updatedSelf.position.z;
         const errorDist = Math.hypot(dx, dz);
-        if (errorDist > DEFAULTS.netMinMoveDelta) {
+        if (errorDist > (DEFAULTS.netReconcileMinError ?? DEFAULTS.netMinMoveDelta)) {
           const correctedPos =
             errorDist > DEFAULTS.netReconcileSnapDist
               ? updatedSelf.serverPosition

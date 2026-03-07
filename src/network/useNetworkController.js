@@ -12,6 +12,7 @@ export const useNetworkController = () => {
   const setSnapshot = useGameStore((s) => s.setSnapshot);
   const touchDamageKick = useGameStore((s) => s.touchDamageKick);
   const playersRef = useRef(useGameStore.getState().players);
+  const lastStateSeqRef = useRef(-1);
 
   const resolveWsUrl = () => {
     const envSignal = import.meta.env.VITE_SIGNALING_URL?.trim() || import.meta.env.VITE_WS_URL?.trim();
@@ -51,11 +52,21 @@ export const useNetworkController = () => {
         }
 
         if (msg.type === MESSAGE_TYPES.ROOM_JOINED) {
+          lastStateSeqRef.current = -1;
           hydrateJoin(msg);
           return;
         }
 
         if (msg.type === MESSAGE_TYPES.STATE_UPDATE) {
+          if (
+            typeof msg.stateSeq === "number" &&
+            msg.stateSeq <= lastStateSeqRef.current
+          ) {
+            return;
+          }
+          if (typeof msg.stateSeq === "number") {
+            lastStateSeqRef.current = msg.stateSeq;
+          }
           const current = useGameStore.getState();
           const selfId = current.selfId;
           const prev = current.players[selfId];

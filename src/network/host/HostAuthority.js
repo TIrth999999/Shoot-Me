@@ -149,6 +149,7 @@ export class HostAuthority {
       players: {},
       zombies: {},
       zombieCounter: 0,
+      stateSeq: 0,
       gameTime: 0,
       spawnRateSec: 4.2,
       maxZombies: 35,
@@ -522,6 +523,7 @@ export class HostAuthority {
     }
 
     this.onStateDiff?.({
+      stateSeq: ++this.room.stateSeq,
       players,
       zombies,
       removedZombieIds,

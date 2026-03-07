@@ -16,6 +16,7 @@ export class NetClient {
     this.authority = null;
     this.peers = new Map();
     this.channels = new Map();
+    this.closingPeers = new Set();
     this.pendingJoinInfo = null;
   }
 
@@ -100,7 +101,7 @@ export class NetClient {
       position,
       rotation,
       seq
-    });
+    }, { realtime: true, reliableFallback: true });
   }
 
   shoot(direction, origin) {
@@ -113,7 +114,7 @@ export class NetClient {
       type: MESSAGE_TYPES.SHOOT,
       direction,
       origin
-    });
+    }, { realtime: false, reliableFallback: true });
   }
 
   restart() {
@@ -122,7 +123,7 @@ export class NetClient {
       this.authority?.restart();
       return;
     }
-    this.sendToHost({ type: MESSAGE_TYPES.RESTART });
+    this.sendToHost({ type: MESSAGE_TYPES.RESTART }, { realtime: false, reliableFallback: true });
   }
 
   ping(clientTs) {
@@ -134,7 +135,7 @@ export class NetClient {
       this.onMessage?.({ type: MESSAGE_TYPES.PONG, clientTs, serverTs: Date.now() });
       return;
     }
-    this.sendToHost({ type: MESSAGE_TYPES.PING, clientTs });
+    this.sendToHost({ type: MESSAGE_TYPES.PING, clientTs }, { realtime: true, reliableFallback: true });
   }
 
   handleSignalMessage(msg) {
@@ -206,15 +207,15 @@ export class NetClient {
       onStateDiff: (diff) => {
         const packet = { type: MESSAGE_TYPES.STATE_UPDATE, ...diff };
         this.onMessage?.(packet);
-        for (const channel of this.channels.values()) {
-          this.sendChannel(channel, packet);
+        for (const peerId of this.channels.keys()) {
+          this.sendToPeer(peerId, packet, { realtime: true, reliableFallback: true });
         }
       },
       onGameOver: ({ gameTime }) => {
         const packet = { type: MESSAGE_TYPES.GAME_OVER, gameTime };
         this.onMessage?.(packet);
-        for (const channel of this.channels.values()) {
-          this.sendChannel(channel, packet);
+        for (const peerId of this.channels.keys()) {
+          this.sendToPeer(peerId, packet, { realtime: false, reliableFallback: true });
         }
       },
       onFatalError: (error) => {
@@ -264,8 +265,10 @@ export class NetClient {
 
   createHostPeer(peerId) {
     const pc = this.createPeerConnection(peerId);
-    const channel = pc.createDataChannel("game", { ordered: true });
-    this.setupDataChannel(peerId, channel);
+    const controlChannel = pc.createDataChannel("ctrl", { ordered: true });
+    const realtimeChannel = pc.createDataChannel("rt", { ordered: false, maxRetransmits: 0 });
+    this.setupDataChannel(peerId, controlChannel);
+    this.setupDataChannel(peerId, realtimeChannel);
     pc.createOffer()
       .then((offer) => pc.setLocalDescription(offer))
       .then(() => {
@@ -321,17 +324,25 @@ export class NetClient {
   }
 
   setupDataChannel(peerId, channel) {
-    this.channels.set(peerId, channel);
+    const label = channel.label === "rt" ? "rt" : "ctrl";
+    const entry = this.channels.get(peerId) || { ctrl: null, rt: null };
+    entry[label] = channel;
+    this.channels.set(peerId, entry);
+
     channel.onopen = () => {
-      if (!this.isHost) return;
+      if (!this.isHost || label !== "ctrl") return;
       this.authority?.addPlayer(peerId);
       const snap = this.authority?.getJoinSnapshot() || { players: {}, zombies: {}, gameTime: 0, spawnRateSec: 2.5 };
-      this.sendChannel(channel, {
-        type: "WELCOME",
-        roomId: this.roomId,
-        selfId: peerId,
-        ...snap
-      });
+      this.sendToPeer(
+        peerId,
+        {
+          type: "WELCOME",
+          roomId: this.roomId,
+          selfId: peerId,
+          ...snap
+        },
+        { realtime: false, reliableFallback: true }
+      );
     };
     channel.onmessage = (event) => {
       let msg = null;
@@ -344,9 +355,17 @@ export class NetClient {
     };
     channel.onerror = () => {};
     channel.onclose = () => {
-      this.closePeer(peerId);
-      if (this.isHost) {
-        this.authority?.removePlayer(peerId);
+      const current = this.channels.get(peerId);
+      if (!current) return;
+      if (current.ctrl === channel) current.ctrl = null;
+      if (current.rt === channel) current.rt = null;
+      if (!current.ctrl && !current.rt) {
+        this.closePeer(peerId);
+        if (this.isHost) {
+          this.authority?.removePlayer(peerId);
+        }
+      } else {
+        this.channels.set(peerId, current);
       }
     };
   }
@@ -370,12 +389,15 @@ export class NetClient {
       if (msg.type === MESSAGE_TYPES.PING) {
         const latency = typeof msg.clientTs === "number" ? Math.max(0, Date.now() - msg.clientTs) : 0;
         this.authority?.setPlayerPing(peerId, latency);
-        const channel = this.channels.get(peerId);
-        this.sendChannel(channel, {
-          type: MESSAGE_TYPES.PONG,
-          clientTs: msg.clientTs,
-          serverTs: Date.now()
-        });
+        this.sendToPeer(
+          peerId,
+          {
+            type: MESSAGE_TYPES.PONG,
+            clientTs: msg.clientTs,
+            serverTs: Date.now()
+          },
+          { realtime: true, reliableFallback: true }
+        );
       }
       return;
     }
@@ -410,32 +432,61 @@ export class NetClient {
     channel.send(JSON.stringify(payload));
   }
 
-  sendToHost(payload) {
-    const channel = this.channels.get(this.hostId);
-    this.sendChannel(channel, payload);
+  sendToPeer(peerId, payload, { realtime = true, reliableFallback = true } = {}) {
+    const entry = this.channels.get(peerId);
+    if (!entry) return;
+    const preferred = realtime ? entry.rt : entry.ctrl;
+    if (preferred?.readyState === "open") {
+      this.sendChannel(preferred, payload);
+      return;
+    }
+    if (!reliableFallback) return;
+    const fallback = realtime ? entry.ctrl : entry.rt;
+    if (fallback?.readyState === "open") {
+      this.sendChannel(fallback, payload);
+    }
+  }
+
+  sendToHost(payload, options) {
+    this.sendToPeer(this.hostId, payload, options);
   }
 
   closePeer(peerId) {
-    const channel = this.channels.get(peerId);
-    if (channel) {
-      this.channels.delete(peerId);
-      channel.close();
-    }
-    const pc = this.peers.get(peerId);
-    if (pc) {
-      this.peers.delete(peerId);
-      pc.close();
+    if (this.closingPeers.has(peerId)) return;
+    this.closingPeers.add(peerId);
+    try {
+      const entry = this.channels.get(peerId);
+      if (entry) {
+        this.channels.delete(peerId);
+        if (entry.ctrl && entry.ctrl.readyState !== "closed") {
+          entry.ctrl.close();
+        }
+        if (entry.rt && entry.rt.readyState !== "closed") {
+          entry.rt.close();
+        }
+      }
+      const pc = this.peers.get(peerId);
+      if (pc) {
+        this.peers.delete(peerId);
+        pc.close();
+      }
+    } finally {
+      this.closingPeers.delete(peerId);
     }
   }
 
   teardownSession(notifyPeers) {
     if (notifyPeers && this.isHost) {
-      for (const channel of this.channels.values()) {
-        this.sendChannel(channel, {
-          type: MESSAGE_TYPES.ERROR,
-          code: "HOST_LEFT",
-          message: "Host ended the room."
-        });
+      for (const peerId of this.channels.keys()) {
+        this.sendToPeer(
+          peerId,
+          {
+            type: MESSAGE_TYPES.ERROR,
+            code: "HOST_LEFT",
+            message: "Host ended the room."
+          },
+          { realtime: false, reliableFallback: true }
+        );
       }
     }
     for (const peerId of Array.from(this.peers.keys())) {
