@@ -426,6 +426,169 @@ button:disabled {
   font-size: 1.24rem;
 }
 
+.theme-dialog {
+  position: relative;
+  border: 1px solid rgba(132, 33, 46, 0.58);
+  border-radius: 4px;
+  padding: 16px 18px 18px;
+  background:
+    linear-gradient(165deg, rgba(9, 11, 18, 0.95) 0%, rgba(8, 10, 14, 0.97) 100%),
+    radial-gradient(circle at 84% 18%, rgba(132, 33, 46, 0.18), transparent 55%);
+  box-shadow:
+    0 16px 30px rgba(0, 0, 0, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.theme-dialog::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(-20deg, rgba(255, 255, 255, 0.03) 0 2px, transparent 2px 8px),
+    radial-gradient(circle at 12% 88%, rgba(255, 255, 255, 0.04) 0 1px, transparent 1px);
+  opacity: 0.5;
+}
+
+.theme-dialog h3 {
+  margin: 0 0 8px;
+  font-family: "Bebas Neue", "Impact", "Arial Narrow", sans-serif;
+  font-size: clamp(1.35rem, 3vw, 1.8rem);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f1f4f7;
+}
+
+.theme-dialog h3 span {
+  color: #c31a36;
+}
+
+.dialog-close {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid rgba(146, 28, 41, 0.65);
+  border-radius: 3px;
+  background: linear-gradient(180deg, rgba(43, 7, 11, 0.95), rgba(27, 4, 8, 0.95));
+  color: #f4dfe3;
+  font-family: "Bebas Neue", "Impact", "Arial Narrow", sans-serif;
+  font-size: 1.2rem;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  background: linear-gradient(180deg, rgba(121, 16, 30, 0.95), rgba(77, 8, 17, 0.95));
+  border-color: rgba(206, 63, 86, 0.88);
+}
+
+.settings-group {
+  position: relative;
+  z-index: 1;
+  margin-top: 4px;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-group h4,
+.credit-block h4 {
+  margin: 0;
+  display: inline-block;
+  width: fit-content;
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #f6f6f6;
+  background:
+    /* linear-gradient(180deg, rgba(255, 190, 190, 0.18) 0%, rgba(255, 255, 255, 0) 24%, rgba(0, 0, 0, 0.14) 100%), */
+    linear-gradient(90deg, rgba(205, 8, 8, 0.98) 0%, rgba(178, 0, 0, 0.9) 25%, rgba(120, 0, 0, 0.35) 45%, rgba(120, 0, 0, 0) 100%);
+  border: 0;
+  box-shadow: none;
+}
+
+.settings-options-row {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.settings-options-row .menu-btn.mini {
+  width: 100%;
+  justify-content: center;
+  text-align: center;
+  padding: 10px 8px;
+  border: 1px solid rgba(168, 174, 186, 0.35);
+  background: linear-gradient(180deg, rgba(17, 20, 28, 0.92), rgba(9, 11, 16, 0.94));
+}
+
+.settings-options-row .menu-btn.mini.active {
+  border-color: rgba(212, 52, 73, 0.86);
+  background: linear-gradient(180deg, rgba(170, 16, 36, 0.96), rgba(112, 8, 22, 0.98));
+  color: #fff;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 186, 186, 0.26),
+    0 0 10px rgba(190, 35, 56, 0.28);
+}
+
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.menu-btn.active {
+  color: #fff;
+}
+
+.sensitivity-range {
+  width: 100%;
+  accent-color: #c31a36;
+}
+
+.sensitivity-value {
+  justify-self: end;
+  font-family: "Bebas Neue", "Impact", "Arial Narrow", sans-serif;
+  font-size: 1.3rem;
+  letter-spacing: 0.05em;
+  color: #f3f5f8;
+}
+
+.credit-layout {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  margin-top: 2px;
+}
+
+.credit-block {
+  display: grid;
+  gap: 5px;
+}
+
+.credit-block.right {
+  justify-self: end;
+  text-align: right;
+  width: min(320px, 100%);
+}
+
+.credit-block p {
+  margin: 0;
+  font-family: "Bebas Neue", "Impact", "Arial Narrow", sans-serif;
+  font-size: 1.45rem;
+  letter-spacing: 0.06em;
+  color: #ffffff;
+}
+
 .menu-btn.mini {
   font-size: 1rem;
   padding: 8px 10px;
@@ -728,6 +891,14 @@ button:disabled {
 
   .menu-btn {
     font-size: clamp(1.15rem, 7vw, 1.65rem);
+  }
+
+  .credit-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .credit-block.right {
+    text-align: left;
   }
 
   .health-widget,

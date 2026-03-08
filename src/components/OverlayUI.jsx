@@ -23,6 +23,10 @@ export default function OverlayUI({ netClient, onStartSolo }) {
   const [joinCode, setJoinCode] = useState("");
   const [activeDialog, setActiveDialog] = useState("none");
   const [weapon, setWeapon] = useState("CARBINE-M4");
+  const [gfxLevel, setGfxLevel] = useState("High");
+  const [musicEnabled, setMusicEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [sensitivity, setSensitivity] = useState(50);
   const menuBg = useMemo(() => "/homeBg1.gif", []);
 
   const me = players[selfId];
@@ -130,8 +134,11 @@ export default function OverlayUI({ netClient, onStartSolo }) {
 
           <div className={`menu-dialog-backdrop ${activeDialog !== "none" ? "show" : ""}`}>
             {activeDialog === "multiplayer" && (
-              <div className="panel menu-dialog">
-                <h3>Multiplayer</h3>
+              <div className="panel menu-dialog theme-dialog">
+                <button className="dialog-close" onClick={() => setActiveDialog("none")} aria-label="Close dialog">
+                  x
+                </button>
+                <h3><span>Multiplayer</span> Mode</h3>
                 <p>Status: {connection}</p>
                 <div className="menu-grid">
                   <button className="menu-btn mini" onClick={createRoom}>Create Room</button>
@@ -146,27 +153,66 @@ export default function OverlayUI({ netClient, onStartSolo }) {
                   ))}
                   {!rooms.length && <span>No active rooms</span>}
                 </div>
-                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
               </div>
             )}
 
             {activeDialog === "settings" && (
-              <div className="panel menu-dialog">
-                <h3>Settings</h3>
-                <div className="stat-stack">
-                  <span>Graphics: High</span>
-                  <span>Post FX: Enabled</span>
-                  <span>Mouse Sensitivity: 1.0</span>
-                  <span>Audio Master: 80%</span>
-                  <span>Current Weapon: {weapon}</span>
+              <div className="panel menu-dialog theme-dialog">
+                <button className="dialog-close" onClick={() => setActiveDialog("none")} aria-label="Close dialog">
+                  x
+                </button>
+                <h3><span>Settings</span> Panel</h3>
+                <div className="settings-group">
+                  <h4>Graphics</h4>
+                  <div className="settings-options-row">
+                    {["Low", "Medium", "High"].map((level) => (
+                      <button
+                        key={level}
+                        className={`menu-btn mini ${gfxLevel === level ? "active" : ""}`}
+                        onClick={() => setGfxLevel(level)}
+                      >
+                        {level}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
+                <div className="settings-group">
+                  <h4>Audio</h4>
+                  <div className="settings-row">
+                    <span>Music</span>
+                    <button className={`menu-btn mini ${musicEnabled ? "active" : ""}`} onClick={() => setMusicEnabled((v) => !v)}>
+                      {musicEnabled ? "On" : "Off"}
+                    </button>
+                  </div>
+                  <div className="settings-row">
+                    <span>Sound</span>
+                    <button className={`menu-btn mini ${soundEnabled ? "active" : ""}`} onClick={() => setSoundEnabled((v) => !v)}>
+                      {soundEnabled ? "On" : "Off"}
+                    </button>
+                  </div>
+                </div>
+                <div className="settings-group">
+                  <h4>Sensitivity</h4>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="1"
+                    value={sensitivity}
+                    onChange={(e) => setSensitivity(Number(e.target.value))}
+                    className="sensitivity-range"
+                  />
+                  <div className="sensitivity-value">{sensitivity}</div>
+                </div>
               </div>
             )}
 
             {activeDialog === "leaderboard" && (
-              <div className="panel menu-dialog">
-                <h3>LeaderBoard</h3>
+              <div className="panel menu-dialog theme-dialog">
+                <button className="dialog-close" onClick={() => setActiveDialog("none")} aria-label="Close dialog">
+                  x
+                </button>
+                <h3><span>LeaderBoard</span> Score</h3>
                 <div className="scoreboard-list">
                   {sortedScore.map((entry) => (
                     <div key={entry.id} className="score-row">
@@ -175,19 +221,25 @@ export default function OverlayUI({ netClient, onStartSolo }) {
                     </div>
                   ))}
                 </div>
-                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
               </div>
             )}
 
             {activeDialog === "credit" && (
-              <div className="panel menu-dialog">
-                <h3>Credit</h3>
-                <div className="stat-stack">
-                  <span>Shoot Me UI Theme</span>
-                  <span>Game Mode: Zombie Survival</span>
-                  <span>Build: Browser Edition</span>
+              <div className="panel menu-dialog theme-dialog">
+                <button className="dialog-close" onClick={() => setActiveDialog("none")} aria-label="Close dialog">
+                  x
+                </button>
+                <h3><span>Credits</span> Team</h3>
+                <div className="credit-layout">
+                  <div className="credit-block">
+                    <h4>Game Director &amp; Developer</h4>
+                    <p>Tirth Gajera</p>
+                  </div>
+                  <div className="credit-block right">
+                    <h4>Game Designer &amp; Developer</h4>
+                    <p>MK</p>
+                  </div>
                 </div>
-                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
               </div>
             )}
           </div>
