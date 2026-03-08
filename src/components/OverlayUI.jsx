@@ -21,8 +21,9 @@ export default function OverlayUI({ netClient, onStartSolo }) {
   const combat = useGameStore((s) => s.combat);
 
   const [joinCode, setJoinCode] = useState("");
-  const [activePanel, setActivePanel] = useState("none");
+  const [activeDialog, setActiveDialog] = useState("none");
   const [weapon, setWeapon] = useState("CARBINE-M4");
+  const menuBg = useMemo(() => "/homeBg1.gif", []);
 
   const me = players[selfId];
   const hpValue = Math.max(0, Math.floor(me?.hp ?? 0));
@@ -33,7 +34,6 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     [zombies]
   );
   const kills = Math.floor((me?.score ?? 0) / 10);
-  const canContinue = gameTime > 0 || mode === "paused" || netMode === "multiplayer";
 
   const sortedScore = useMemo(() => {
     return Object.entries(players)
@@ -72,17 +72,9 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     setMode("playing");
   };
 
-  const continueGame = () => {
-    if (!canContinue) {
-      setError("No active run to continue.");
-      return;
-    }
-    setMode("playing");
-  };
-
   useEffect(() => {
     if (mode === "menu") {
-      setActivePanel("none");
+      setActiveDialog("none");
     }
   }, [mode]);
 
@@ -105,129 +97,99 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     if (netMode === "multiplayer") {
       netClient?.leaveRoom();
     }
-    setActivePanel("none");
+    setActiveDialog("none");
     setMode("menu");
   };
 
   return (
     <div className="ui-root">
       {mode === "menu" && (
-        <div className="menu-screen">
-          <div className="menu-smoke menu-smoke-a" />
-          <div className="menu-smoke menu-smoke-b" />
-          <div className="menu-noise" />
-          <div className="panel menu-shell">
-            <div className="title-block">
-              <h1>SHOOT ME</h1>
-              <p>A Zombie Survival Game</p>
-            </div>
+        <div className="menu-screen" style={{ backgroundImage: `url(${menuBg})` }}>
+          <img className="menu-logo" src="/logo.png" alt="Shoot Me" />
+          <div className="menu-right-actions">
+            <button className="menu-btn" onClick={startSolo}>
+              Play
+            </button>
+            <button className="menu-btn" onClick={() => setActiveDialog("multiplayer")}>
+              Multiplayer
+            </button>
+            <button className="menu-btn" onClick={() => setActiveDialog("settings")}>
+              Settings
+            </button>
+            <button className="menu-btn" onClick={() => setActiveDialog("leaderboard")}>
+              LeaderBoard
+            </button>
+            <button className="menu-btn" onClick={() => setActiveDialog("credit")}>
+              Credit
+            </button>
+            <button className="menu-btn danger" onClick={() => setError("Exit is not available in browser build.")}>
+              Exit
+            </button>
+            {error && <div className="menu-error">{error}</div>}
+          </div>
 
-            <div className="menu-layout">
-              <div className="menu-actions">
-                <button className="menu-btn" onClick={startSolo}>
-                  Play
-                </button>
-                <button className="menu-btn" onClick={createRoom}>
-                  Play Multiplayer
-                </button>
-                <button className="menu-btn" onClick={continueGame} disabled={!canContinue}>
-                  Continue
-                </button>
-                <button className="menu-btn" onClick={() => setActivePanel("loadout")}>
-                  Select Weapon / Loadout
-                </button>
-                <button className="menu-btn" onClick={() => setActivePanel("settings")}>
-                  Settings
-                </button>
-                <button className="menu-btn" onClick={() => setActivePanel("leaderboard")}>
-                  Leaderboard
-                </button>
-                <button className="menu-btn" onClick={() => setActivePanel("none")}>
-                  Home
-                </button>
-                <button className="menu-btn danger" onClick={() => setError("Exit is not available in browser build.")}>
-                  Exit
-                </button>
-              </div>
-
-              <div className="panel side-panel">
-                {activePanel === "none" && (
-                  <>
-                    <h3>Session Control</h3>
-                    <p>Pick a mode and enter the dead zone.</p>
-                    <p>Choose solo for local survival or multiplayer for room matchmaking.</p>
-                  </>
-                )}
-
-                {activePanel === "loadout" && (
-                  <>
-                    <h3>Loadout</h3>
-                    <p>Select your primary weapon profile.</p>
-                    <div className="menu-grid">
-                      <button onClick={() => setWeapon("CARBINE-M4")} className={weapon === "CARBINE-M4" ? "active" : ""}>
-                        CARBINE-M4
-                      </button>
-                      <button onClick={() => setWeapon("REAPER-AK")} className={weapon === "REAPER-AK" ? "active" : ""}>
-                        REAPER-AK
-                      </button>
-                      <button onClick={() => setWeapon("VIGIL-9")} className={weapon === "VIGIL-9" ? "active" : ""}>
-                        VIGIL-9
-                      </button>
-                    </div>
-                  </>
-                )}
-
-                {activePanel === "settings" && (
-                  <>
-                    <h3>Settings</h3>
-                    <p>Visual and control profile options.</p>
-                    <div className="stat-stack">
-                      <span>Graphics: High</span>
-                      <span>Post FX: Enabled</span>
-                      <span>Mouse Sensitivity: 1.0</span>
-                      <span>Audio Master: 80%</span>
-                    </div>
-                  </>
-                )}
-
-                {activePanel === "leaderboard" && (
-                  <>
-                    <h3>Leaderboard</h3>
-                    <div className="scoreboard-list">
-                      {sortedScore.map((entry) => (
-                        <div key={entry.id} className="score-row">
-                          <span>{entry.id === selfId ? "YOU" : entry.id.slice(0, 8)}</span>
-                          <span>{entry.score}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </>
-                )}
-
-                <div className="matchmake-box">
-                  <h3>Matchmaking</h3>
-                  <div className="menu-grid">
-                    <button onClick={createRoom}>Create Room</button>
-                    <button onClick={() => joinRoom(joinCode)}>Join Room</button>
-                  </div>
-                  <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="Enter Room ID" />
-                  <div className="room-list">
-                    {rooms.map((room) => (
-                      <button key={room.roomId} onClick={() => joinRoom(room.roomId)} className="room-item">
-                        {room.roomId} | {room.players}/{room.maxPlayers}
-                      </button>
-                    ))}
-                    {!rooms.length && <span>No active rooms</span>}
-                  </div>
+          <div className={`menu-dialog-backdrop ${activeDialog !== "none" ? "show" : ""}`}>
+            {activeDialog === "multiplayer" && (
+              <div className="panel menu-dialog">
+                <h3>Multiplayer</h3>
+                <p>Status: {connection}</p>
+                <div className="menu-grid">
+                  <button className="menu-btn mini" onClick={createRoom}>Create Room</button>
+                  <button className="menu-btn mini" onClick={() => joinRoom(joinCode)}>Join Room</button>
                 </div>
+                <input value={joinCode} onChange={(e) => setJoinCode(e.target.value)} placeholder="Enter Room ID" />
+                <div className="room-list">
+                  {rooms.map((room) => (
+                    <button key={room.roomId} onClick={() => joinRoom(room.roomId)} className="room-item">
+                      {room.roomId} | {room.players}/{room.maxPlayers}
+                    </button>
+                  ))}
+                  {!rooms.length && <span>No active rooms</span>}
+                </div>
+                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
               </div>
-            </div>
+            )}
 
-            <div className="menu-footer">
-              <span>Status: {connection}</span>
-              <span>Current Weapon: {weapon}</span>
-              {error && <span className="error">{error}</span>}
-            </div>
+            {activeDialog === "settings" && (
+              <div className="panel menu-dialog">
+                <h3>Settings</h3>
+                <div className="stat-stack">
+                  <span>Graphics: High</span>
+                  <span>Post FX: Enabled</span>
+                  <span>Mouse Sensitivity: 1.0</span>
+                  <span>Audio Master: 80%</span>
+                  <span>Current Weapon: {weapon}</span>
+                </div>
+                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
+              </div>
+            )}
+
+            {activeDialog === "leaderboard" && (
+              <div className="panel menu-dialog">
+                <h3>LeaderBoard</h3>
+                <div className="scoreboard-list">
+                  {sortedScore.map((entry) => (
+                    <div key={entry.id} className="score-row">
+                      <span>{entry.id === selfId ? "YOU" : entry.id.slice(0, 8)}</span>
+                      <span>{entry.score}</span>
+                    </div>
+                  ))}
+                </div>
+                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
+              </div>
+            )}
+
+            {activeDialog === "credit" && (
+              <div className="panel menu-dialog">
+                <h3>Credit</h3>
+                <div className="stat-stack">
+                  <span>Shoot Me UI Theme</span>
+                  <span>Game Mode: Zombie Survival</span>
+                  <span>Build: Browser Edition</span>
+                </div>
+                <button className="menu-btn mini" onClick={() => setActiveDialog("none")}>Back</button>
+              </div>
+            )}
           </div>
         </div>
       )}
