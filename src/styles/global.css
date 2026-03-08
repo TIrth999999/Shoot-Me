@@ -268,7 +268,7 @@ button:disabled {
   position: absolute;
   top: clamp(16px, 3vw, 34px);
   left: clamp(16px, 3vw, 36px);
-  width: min(320px, 42vw);
+  width: min(500px, 62vw);
   height: auto;
   z-index: 23;
   filter: drop-shadow(0 12px 24px rgba(0, 0, 0, 0.5));
@@ -284,6 +284,47 @@ button:disabled {
   display: grid;
   gap: 10px;
   pointer-events: auto;
+}
+
+.menu-right-actions .menu-btn {
+  justify-content: flex-end;
+  text-align: right;
+  padding: 10px 6px;
+  overflow: visible;
+}
+
+.menu-right-actions .menu-btn::before {
+  display: none;
+}
+
+.menu-right-actions .menu-btn::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: -14px;
+  top: 1px;
+  bottom: 1px;
+  opacity: 0;
+  z-index: -1;
+  transform: translateX(10px);
+  transition: opacity 120ms ease, transform 140ms ease;
+  background:
+    linear-gradient(180deg, rgba(255, 190, 190, 0.22) 0%, rgba(255, 255, 255, 0) 26%, rgba(0, 0, 0, 0.18) 100%),
+    linear-gradient(90deg, rgba(120, 0, 0, 0) 0%, rgba(145, 0, 0, 0.35) 35%, rgba(172, 0, 0, 0.9) 72%, rgba(205, 8, 8, 0.98) 100%);
+  border-radius: 3px;
+  -webkit-mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, #000 9%, #000 91%, rgba(0, 0, 0, 0) 100%);
+  mask-image: linear-gradient(90deg, rgba(0, 0, 0, 0) 0%, #000 9%, #000 91%, rgba(0, 0, 0, 0) 100%);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 198, 198, 0.24),
+    inset 0 -2px 0 rgba(64, 0, 0, 0.5),
+    inset 0 0 12px rgba(45, 0, 0, 0.42),
+    0 2px 8px rgba(0, 0, 0, 0.35);
+}
+
+.menu-right-actions .menu-btn:hover::after,
+.menu-right-actions .menu-btn:focus-visible::after {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .menu-btn {
@@ -673,7 +714,7 @@ button:disabled {
 
 @media (max-width: 640px) {
   .menu-logo {
-    width: min(240px, 58vw);
+    width: min(360px, 72vw);
   }
 
   .menu-right-actions {

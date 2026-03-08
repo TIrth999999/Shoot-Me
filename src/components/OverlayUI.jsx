@@ -105,7 +105,7 @@ export default function OverlayUI({ netClient, onStartSolo }) {
     <div className="ui-root">
       {mode === "menu" && (
         <div className="menu-screen" style={{ backgroundImage: `url(${menuBg})` }}>
-          <img className="menu-logo" src="/logo.png" alt="Shoot Me" />
+          <img className="menu-logo" src="/logo-theme.svg" alt="Shoot Me" />
           <div className="menu-right-actions">
             <button className="menu-btn" onClick={startSolo}>
               Play

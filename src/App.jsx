@@ -110,7 +110,19 @@ export default function App() {
       createAndPreload(`/zombieS${i + 1}.mp3`, 0.5)
     );
     if (audioBus.current.bgm) {
-      audioBus.current.bgm.loop = true;
+      const bgm = audioBus.current.bgm;
+      bgm.loop = true;
+
+      const tryStart = () => {
+        if (!bgm.paused) return;
+        void bgm.play().catch(() => {});
+      };
+
+      if (bgm.readyState >= 3) {
+        tryStart();
+      } else {
+        bgm.addEventListener("canplaythrough", tryStart, { once: true });
+      }
     }
 
     return () => {
@@ -144,8 +156,7 @@ export default function App() {
   useEffect(() => {
     const tryStartBgm = () => {
       const bgm = audioBus.current.bgm;
-      if (!bgm) return;
-      if (!bgm.paused) return;
+      if (!bgm || !bgm.paused) return;
       void bgm.play().catch(() => {});
     };
 
@@ -184,11 +195,13 @@ export default function App() {
     window.addEventListener("keydown", onEscape);
     window.addEventListener("pointerdown", tryStartBgm);
     window.addEventListener("keydown", tryStartBgm);
+    window.addEventListener("touchstart", tryStartBgm, { passive: true });
     window.addEventListener("sfx", onSfx);
     return () => {
       window.removeEventListener("keydown", onEscape);
       window.removeEventListener("pointerdown", tryStartBgm);
       window.removeEventListener("keydown", tryStartBgm);
+      window.removeEventListener("touchstart", tryStartBgm);
       window.removeEventListener("sfx", onSfx);
     };
   }, []);
