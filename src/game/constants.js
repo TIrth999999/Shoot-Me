@@ -1,3 +1,5 @@
+/** @format */
+
 import { ZOMBIE_TYPES } from "./zombieTypes";
 
 export const MESSAGE_TYPES = {
@@ -14,12 +16,27 @@ export const MESSAGE_TYPES = {
   STATE_UPDATE: "STATE_UPDATE",
   ROOM_LIST: "ROOM_LIST",
   GAME_OVER: "GAME_OVER",
-  ERROR: "ERROR"
+  ERROR: "ERROR",
 };
 
 export const DEFAULTS = {
   worldWidth: 140,
   worldDepth: 140,
+  terrainMaxSlopeDeg: 46,
+  terrainStepHeight: 0.85,
+  playerCollisionRadius: 0.56,
+  zombieCollisionRadiusByType: {
+    default: 0.62,
+    [ZOMBIE_TYPES.SKINNER]: 0.68,
+    [ZOMBIE_TYPES.SKINNER_FRIENDLY]: 0.68,
+    [ZOMBIE_TYPES.ZOMBIE_DOG]: 0.52,
+    [ZOMBIE_TYPES.ZOMBIE_DOG_LONG]: 0.64,
+  },
+  forestAutoFitTargetSize: 138,
+  forestScaleMultiplier: 1,
+  terrainMeshWhitelist: ["Object_2"],
+  treeMeshNamePatterns: ["Object_13", "Object_14"],
+  terrainDebug: false,
   playerSpeed: 7,
   sprintMult: 1.6,
   cameraDistance: 8,
@@ -45,16 +62,16 @@ export const DEFAULTS = {
     [ZOMBIE_TYPES.SKINNER]: 50,
     [ZOMBIE_TYPES.SKINNER_FRIENDLY]: 50,
     [ZOMBIE_TYPES.ZOMBIE_DOG]: 10,
-    [ZOMBIE_TYPES.ZOMBIE_DOG_LONG]: 40
+    [ZOMBIE_TYPES.ZOMBIE_DOG_LONG]: 40,
   },
   zombieTypeSpeedMult: {
-    [ZOMBIE_TYPES.SKINNER]: 4.35
+    [ZOMBIE_TYPES.SKINNER]: 4.35,
   },
   zombieFriendlyOrbit: {
     radiusMin: 5,
     radiusMax: 10,
     speedMin: 1.4,
-    speedMax: 2.8
+    speedMax: 2.8,
   },
   pingIntervalMs: 1200,
   interpAlpha: 0.18,
@@ -68,5 +85,5 @@ export const DEFAULTS = {
   netReconcileMinError: 2.5,
   remoteInterpolationDelayMs: 100,
   zombieHp: 45,
-  playerHp: 100
+  playerHp: 100000,
 };
