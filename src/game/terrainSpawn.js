@@ -53,8 +53,8 @@ export const pickTerrainSpawnPosition = ({
   radius = 0.5
 } = {}) => {
   const runtime = getTerrainRuntime();
-  const bounds = runtime.getBounds();
   const playerPositions = getPlayerPositions(players);
+  const bounds = runtime.getSpawnBounds?.(playerPositions) || runtime.getBounds();
   let fallback = null;
 
   for (let i = 0; i < maxTries; i += 1) {

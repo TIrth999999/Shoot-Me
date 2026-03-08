@@ -9,12 +9,14 @@ const TICK_MS = Math.floor(1000 / 60);
 const SNAPSHOT_INTERVAL_SEC = 1 / 20;
 const MIN_SPAWN_DIST_FROM_PLAYER = 18;
 const MAX_SPAWN_TRIES = 20;
+const WORLD_OFFSET_ZERO = Object.freeze({ x: 0, y: 0, z: 0 });
 
 const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
 const dist2D = (a, b) => Math.hypot(a.x - b.x, a.z - b.z);
 
 const roundPos = (v) => Math.round(v * 100) / 100;
 const roundYaw = (v) => Math.round(v * 1000) / 1000;
+const createTerrainSeed = () => Math.floor(Math.random() * 0x7fffffff);
 
 const sanitizeRotation = (rotation) => {
   if (!rotation || typeof rotation.yaw !== "number" || !Number.isFinite(rotation.yaw)) {
@@ -123,7 +125,7 @@ const settleZombieToGround = (zombie, groundY, dtSec) => {
 };
 
 export class HostAuthority {
-  constructor({ hostId, onStateDiff, onGameOver, onFatalError }) {
+  constructor({ hostId, onStateDiff, onGameOver, onFatalError, terrainSeed }) {
     this.hostId = hostId;
     this.onStateDiff = onStateDiff;
     this.onGameOver = onGameOver;
@@ -132,6 +134,8 @@ export class HostAuthority {
     this.room = {
       players: {},
       zombies: {},
+      terrainSeed: Number.isFinite(terrainSeed) ? terrainSeed : createTerrainSeed(),
+      worldOriginOffset: { ...WORLD_OFFSET_ZERO },
       zombieCounter: 0,
       stateSeq: 0,
       gameTime: 0,
@@ -184,7 +188,9 @@ export class HostAuthority {
       players,
       zombies: this.room.zombies,
       gameTime: this.room.gameTime,
-      spawnRateSec: this.room.spawnRateSec
+      spawnRateSec: this.room.spawnRateSec,
+      terrainSeed: this.room.terrainSeed,
+      worldOriginOffset: { ...this.room.worldOriginOffset }
     };
   }
 
@@ -360,6 +366,50 @@ export class HostAuthority {
       this.room.dirtyPlayers.add(id);
     }
     this.flushSnapshot(true);
+  }
+
+  maybeRebaseWorld() {
+    const threshold = Math.max(0, DEFAULTS.terrainRebaseDistance || 0);
+    if (threshold <= 0) return false;
+
+    const anchor =
+      this.room.players[this.hostId] ||
+      Object.values(this.room.players).find((p) => p && !p.isDead && p.position) ||
+      Object.values(this.room.players).find((p) => p && p.position);
+    if (!anchor?.position) return false;
+
+    const anchorDist = Math.hypot(anchor.position.x || 0, anchor.position.z || 0);
+    if (anchorDist < threshold) return false;
+
+    const shiftX = -(anchor.position.x || 0);
+    const shiftZ = -(anchor.position.z || 0);
+    if (Math.abs(shiftX) < 1e-6 && Math.abs(shiftZ) < 1e-6) return false;
+
+    for (const [playerId, player] of Object.entries(this.room.players)) {
+      if (!player?.position) continue;
+      player.position = {
+        ...player.position,
+        x: (player.position.x || 0) + shiftX,
+        z: (player.position.z || 0) + shiftZ
+      };
+      this.room.dirtyPlayers.add(playerId);
+    }
+    for (const [zombieId, zombie] of Object.entries(this.room.zombies)) {
+      if (!zombie?.position) continue;
+      zombie.position = {
+        ...zombie.position,
+        x: (zombie.position.x || 0) + shiftX,
+        z: (zombie.position.z || 0) + shiftZ
+      };
+      this.room.dirtyZombies.add(zombieId);
+    }
+
+    this.room.worldOriginOffset = {
+      x: (this.room.worldOriginOffset.x || 0) + shiftX,
+      y: this.room.worldOriginOffset.y || 0,
+      z: (this.room.worldOriginOffset.z || 0) + shiftZ
+    };
+    return true;
   }
 
   spawnZombies(dtSec) {
@@ -553,6 +603,8 @@ export class HostAuthority {
       removedZombieIds,
       gameTime: this.room.gameTime,
       spawnRateSec: this.room.spawnRateSec,
+      terrainSeed: this.room.terrainSeed,
+      worldOriginOffset: { ...this.room.worldOriginOffset },
       gameOver: this.room.gameOver,
       serverTs: Date.now()
     });
@@ -565,12 +617,13 @@ export class HostAuthority {
     this.updateDifficulty();
     this.spawnZombies(dtSec);
     this.updateZombies(dtSec);
+    const rebased = this.maybeRebaseWorld();
 
     if (!this.room.gameOver && isEveryoneDead(this.room.players)) {
       this.room.gameOver = true;
     }
 
-    if (this.room.snapshotAccumulator >= SNAPSHOT_INTERVAL_SEC) {
+    if (rebased || this.room.snapshotAccumulator >= SNAPSHOT_INTERVAL_SEC) {
       this.room.snapshotAccumulator = 0;
       this.flushSnapshot(false);
     }
