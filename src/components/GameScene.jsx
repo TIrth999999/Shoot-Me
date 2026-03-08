@@ -1,10 +1,15 @@
-import { useFrame } from "@react-three/fiber";
-import { Sky, useGLTF } from "@react-three/drei";
+/** @format */
+
+import { useFrame, useThree } from "@react-three/fiber";
+import { Sky, SpotLight, useGLTF } from "@react-three/drei";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { Box3, Color, Fog, Vector3 } from "three";
 import { useGameStore } from "../state/useGameStore";
 import { DEFAULTS } from "../game/constants";
-import { createTerrainRuntime, registerTerrainRuntime } from "../game/terrainRuntime";
+import {
+  createTerrainRuntime,
+  registerTerrainRuntime,
+} from "../game/terrainRuntime";
 import PlayerAvatar from "./PlayerAvatar";
 import ZombieAvatar from "./ZombieAvatar";
 
@@ -25,7 +30,11 @@ function AtmosphereLights() {
   return (
     <>
       <ambientLight intensity={0.5} color="#00b3b0" />
-      <hemisphereLight intensity={0.56} color="#00b3b0" groundColor="rgb(0, 78, 90)" />
+      <hemisphereLight
+        intensity={0.56}
+        color="#00b3b0"
+        groundColor="rgb(0, 78, 90)"
+      />
       <directionalLight
         ref={sun}
         position={[34, 34, 60]}
@@ -41,7 +50,12 @@ function AtmosphereLights() {
         shadow-camera-top={110}
         shadow-camera-bottom={-110}
       />
-      <directionalLight ref={fill} position={[-28, 18, -16]} intensity={0.26} color="#ffce8a" />
+      <directionalLight
+        ref={fill}
+        position={[-28, 18, -16]}
+        intensity={0.26}
+        color="#ffce8a"
+      />
     </>
   );
 }
@@ -59,7 +73,7 @@ function GhostParticles({ count = 72 }) {
         bobSpeed: 0.45 + Math.random() * 1.1,
         phase: Math.random() * Math.PI * 2,
         size: 0.1 + Math.random() * 0.32,
-        color: "#00b3b0"
+        color: "#00b3b0",
       });
     }
     return arr;
@@ -76,7 +90,7 @@ function GhostParticles({ count = 72 }) {
       mesh.position.set(
         Math.cos(a) * p.radius,
         p.y + Math.sin(t * p.bobSpeed + p.phase) * p.bobAmp,
-        Math.sin(a) * p.radius
+        Math.sin(a) * p.radius,
       );
     }
   });
@@ -89,7 +103,11 @@ function GhostParticles({ count = 72 }) {
           ref={(el) => {
             refs.current[i] = el;
           }}
-          position={[Math.cos(p.angle) * p.radius, p.y, Math.sin(p.angle) * p.radius]}
+          position={[
+            Math.cos(p.angle) * p.radius,
+            p.y,
+            Math.sin(p.angle) * p.radius,
+          ]}
         >
           <sphereGeometry args={[p.size, 10, 10]} />
           <meshStandardMaterial
@@ -125,12 +143,15 @@ function ForestTerrain() {
     box.getSize(sizeVec);
     const footprint = Math.max(0.001, sizeVec.x, sizeVec.z);
     const autoFitScale = DEFAULTS.forestAutoFitTargetSize / footprint;
-    const scale = Math.max(0.001, autoFitScale * DEFAULTS.forestScaleMultiplier);
+    const scale = Math.max(
+      0.001,
+      autoFitScale * DEFAULTS.forestScaleMultiplier,
+    );
     const centerX = (box.min.x + box.max.x) * 0.5;
     const centerZ = (box.min.z + box.max.z) * 0.5;
     return {
       scale,
-      position: [-centerX * scale, -box.min.y * scale, -centerZ * scale]
+      position: [-centerX * scale, -box.min.y * scale, -centerZ * scale],
     };
   }, [forestScene, sizeVec]);
 
@@ -142,7 +163,7 @@ function ForestTerrain() {
       terrainMeshWhitelist: DEFAULTS.terrainMeshWhitelist,
       treeMeshNamePatterns: DEFAULTS.treeMeshNamePatterns,
       maxSlopeDeg: DEFAULTS.terrainMaxSlopeDeg,
-      stepHeight: DEFAULTS.terrainStepHeight
+      stepHeight: DEFAULTS.terrainStepHeight,
     });
     registerTerrainRuntime(runtime);
     return () => {
@@ -151,9 +172,55 @@ function ForestTerrain() {
   }, [transform]);
 
   return (
-    <group ref={terrainRef} scale={[transform.scale, transform.scale, transform.scale]} position={transform.position}>
+    <group
+      ref={terrainRef}
+      scale={[transform.scale, transform.scale, transform.scale]}
+      position={transform.position}
+    >
       <primitive object={forestScene} />
     </group>
+  );
+}
+
+function PlayerTorch() {
+  const { camera } = useThree();
+  const spotRef = useRef();
+  const targetRef = useRef();
+  const leftHandOffset = useMemo(() => new Vector3(-0.76, 0.34, -1.8), []);
+  const beamTarget = useMemo(() => new Vector3(), []);
+  const offsetWorld = useMemo(() => new Vector3(), []);
+
+  useFrame(() => {
+    if (!spotRef.current || !targetRef.current) return;
+    offsetWorld.copy(leftHandOffset).applyQuaternion(camera.quaternion);
+    spotRef.current.position.copy(camera.position).add(offsetWorld);
+
+    camera.getWorldDirection(beamTarget);
+    targetRef.current.position
+      .copy(camera.position)
+      .addScaledVector(beamTarget, 28);
+    targetRef.current.updateMatrixWorld();
+    if (spotRef.current.target !== targetRef.current) {
+      spotRef.current.target = targetRef.current;
+    }
+  });
+
+  return (
+    <>
+      <ambientLight intensity={0.12} />
+      <SpotLight
+        ref={spotRef}
+        penumbra={1}
+        distance={108}
+        angle={0.58}
+        attenuation={7}
+        anglePower={50}
+        intensity={164}
+        volumetric
+        castShadow
+      />
+      <object3D ref={targetRef} />
+    </>
   );
 }
 
@@ -165,9 +232,9 @@ export default function GameScene() {
 
   return (
     <>
-      <color attach="background" args={[new Color("#23383a")]} />
-      <primitive attach="fog" object={fog} />
-      <Sky
+      <color attach="background" args={[new Color("black")]} />
+      {/* <primitive attach="fog" object={fog} /> */}
+      {/* <Sky
         distance={450000}
         sunPosition={[0, 0, 0]}
         inclination={0.64}
@@ -176,13 +243,15 @@ export default function GameScene() {
         rayleigh={0.35}
         mieCoefficient={0.02}
       />
-      <AtmosphereLights />
+      <AtmosphereLights /> */}
       <ForestTerrain />
       <GhostParticles />
-
-      {Object.entries(players).map(([id, player]) => (
-        DEFAULTS.firstPerson && id === selfId ? null : <PlayerAvatar key={id} player={player} isSelf={id === selfId} />
-      ))}
+      <PlayerTorch />
+      {Object.entries(players).map(([id, player]) =>
+        DEFAULTS.firstPerson && id === selfId ? null : (
+          <PlayerAvatar key={id} player={player} isSelf={id === selfId} />
+        ),
+      )}
 
       {Object.values(zombies).map((z) => (
         <ZombieAvatar key={z.id} zombie={z} players={players} />
