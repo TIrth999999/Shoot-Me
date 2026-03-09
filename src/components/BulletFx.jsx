@@ -22,7 +22,28 @@ export default function BulletFx() {
     };
 
     window.addEventListener("shot", onShot);
-    return () => window.removeEventListener("shot", onShot);
+    const onWorldRebase = (event) => {
+      const dx = Number.isFinite(event?.detail?.delta?.x) ? event.detail.delta.x : 0;
+      const dy = Number.isFinite(event?.detail?.delta?.y) ? event.detail.delta.y : 0;
+      const dz = Number.isFinite(event?.detail?.delta?.z) ? event.detail.delta.z : 0;
+      if (Math.abs(dx) < 1e-6 && Math.abs(dy) < 1e-6 && Math.abs(dz) < 1e-6) return;
+      setShots((prev) =>
+        prev.map((shot) => ({
+          ...shot,
+          origin: {
+            x: shot.origin.x + dx,
+            y: shot.origin.y + dy,
+            z: shot.origin.z + dz
+          }
+        }))
+      );
+    };
+
+    window.addEventListener("world_rebase", onWorldRebase);
+    return () => {
+      window.removeEventListener("shot", onShot);
+      window.removeEventListener("world_rebase", onWorldRebase);
+    };
   }, []);
 
   useFrame((_, dt) => {

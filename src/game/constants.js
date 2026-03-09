@@ -22,6 +22,13 @@ export const MESSAGE_TYPES = {
 export const DEFAULTS = {
   worldWidth: 140,
   worldDepth: 140,
+  terrainSeed: 1337,
+  terrainTileRing: 1,
+  terrainTileSize: 0,
+  terrainTileJitterMax: 0,
+  terrainPrewarmTiles: 1,
+  terrainDisposeMarginTiles: 1,
+  terrainRebaseDistance: 420,
   terrainMaxSlopeDeg: 46,
   terrainStepHeight: 0.85,
   playerCollisionRadius: 0.56,

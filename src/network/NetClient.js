@@ -1,6 +1,15 @@
 import { MESSAGE_TYPES } from "../game/constants";
 import { HostAuthority } from "./host/HostAuthority";
 
+const DEFAULT_JOIN_SNAPSHOT = {
+  players: {},
+  zombies: {},
+  gameTime: 0,
+  spawnRateSec: 2.5,
+  terrainSeed: undefined,
+  worldOriginOffset: { x: 0, y: 0, z: 0 }
+};
+
 export class NetClient {
   constructor({ url, onMessage, onOpen, onClose, onError }) {
     this.url = url;
@@ -159,7 +168,7 @@ export class NetClient {
 
       if (this.isHost) {
         this.startHostAuthority();
-        const snap = this.authority?.getJoinSnapshot() || { players: {}, zombies: {}, gameTime: 0, spawnRateSec: 2.5 };
+        const snap = this.authority?.getJoinSnapshot() || DEFAULT_JOIN_SNAPSHOT;
         this.onMessage?.({
           type: MESSAGE_TYPES.ROOM_JOINED,
           roomId: this.roomId,
@@ -332,7 +341,7 @@ export class NetClient {
     channel.onopen = () => {
       if (!this.isHost || label !== "ctrl") return;
       this.authority?.addPlayer(peerId);
-      const snap = this.authority?.getJoinSnapshot() || { players: {}, zombies: {}, gameTime: 0, spawnRateSec: 2.5 };
+      const snap = this.authority?.getJoinSnapshot() || DEFAULT_JOIN_SNAPSHOT;
       this.sendToPeer(
         peerId,
         {
@@ -410,7 +419,9 @@ export class NetClient {
         players: msg.players || {},
         zombies: msg.zombies || {},
         gameTime: typeof msg.gameTime === "number" ? msg.gameTime : 0,
-        spawnRateSec: typeof msg.spawnRateSec === "number" ? msg.spawnRateSec : 2.5
+        spawnRateSec: typeof msg.spawnRateSec === "number" ? msg.spawnRateSec : 2.5,
+        terrainSeed: msg.terrainSeed,
+        worldOriginOffset: msg.worldOriginOffset
       });
       this.pendingJoinInfo = null;
       return;
